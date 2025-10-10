@@ -128,15 +128,31 @@ async function loadChapter() {
   const response = await fetch("texts/atticus-ch2.txt");
   const text = await response.text();
 
-  // Some source files may contain literal backslash-n sequences ("\\n")
-  // rather than actual newline characters. Convert those into real
-  // newlines so the tokenizer and renderer can treat them as line breaks.
-  // Handle both "\\r\\n" (Windows-escaped) and "\\n" forms.
+  // keep both raw and normalized versions for debugging and toggling
+  window.__rawChapterText = text;
   let normalizedText = text.replace(/\\r\\n/g, "\n");
   normalizedText = normalizedText.replace(/\\n/g, "\n");
+  window.__normalizedChapterText = normalizedText;
 
-  renderLatinText(normalizedText);
+  // By default (checkbox in the toolbar) we normalize. The toggle will
+  // decide which version to render.
+  const shouldNormalize = (document.getElementById('normalize-toggle') || {}).checked ?? true;
+  renderLatinText(shouldNormalize ? normalizedText : text);
   attachVocabEvents();
+
+  // wire up toolbar actions
+  const toggle = document.getElementById('normalize-toggle');
+  if (toggle) {
+    toggle.addEventListener('change', (e) => {
+      renderLatinText(e.target.checked ? window.__normalizedChapterText : window.__rawChapterText);
+      attachVocabEvents();
+    });
+  }
+
+  const compareBtn = document.getElementById('compare-btn');
+  if (compareBtn) {
+    compareBtn.addEventListener('click', () => showCompareView(window.__rawChapterText, window.__normalizedChapterText));
+  }
 }
 
 function renderLatinText(text) {
@@ -340,6 +356,29 @@ function showNoteInPane(noteObj) {
   noteDiv.classList.add("flash");
   setTimeout(() => noteDiv.classList.remove("flash"), 600);
   noteDiv.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function showCompareView(raw, normalized) {
+  const notesPane = document.getElementById('notes-content');
+  // remove placeholder paragraph if present
+  const placeholder = Array.from(notesPane.children).find((c)=>c.tagName === 'P');
+  if (placeholder) placeholder.remove();
+
+  // clear existing compare container if any
+  let container = notesPane.querySelector('.compare-container');
+  if (container) container.remove();
+
+  container = document.createElement('div');
+  container.className = 'compare-container';
+
+  const rawPre = document.createElement('pre');
+  rawPre.textContent = raw;
+  const normPre = document.createElement('pre');
+  normPre.textContent = normalized;
+
+  container.appendChild(rawPre);
+  container.appendChild(normPre);
+  notesPane.prepend(container);
 }
 
 /* ---------- boot ---------- */
