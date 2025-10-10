@@ -5,6 +5,7 @@ let vocabEntries = [];
 let notesData = {}; // raw notes map from notes.json
 let notesList = []; // processed array of note objects
 const MIN_STEM_LEN = 3;
+let currentChapter = 2;
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -83,7 +84,10 @@ function guessLemmaFromHeuristics(word) {
 
 /* ---------- load vocab ---------- */
 async function loadVocab() {
-  const resp = await fetch("vocab.json");
+  // try chapter-specific vocab first, then fall back to global vocab.json
+  const vocabPath = `vocab-ch${currentChapter}.json`;
+  let resp = await fetch(vocabPath).catch(() => null);
+  if (!resp || !resp.ok) resp = await fetch("vocab.json");
   vocabData = await resp.json();
   const vocabList = document.getElementById("vocab-list");
   vocabList.innerHTML = "";
@@ -110,7 +114,10 @@ async function loadVocab() {
 /* ---------- load notes ---------- */
 async function loadNotes() {
   try {
-    const resp = await fetch("notes.json");
+    // chapter-specific notes fallback
+    const notesPath = `notes-ch${currentChapter}.json`;
+    let resp = await fetch(notesPath).catch(() => null);
+    if (!resp || !resp.ok) resp = await fetch("notes.json");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     notesData = await resp.json();
     notesList = Object.entries(notesData).map(([latin_ref, note], idx) => {
@@ -165,13 +172,26 @@ function escapeHtml(s) {
 
 /* ---------- main text load ---------- */
 async function loadChapter() {
-  const response = await fetch("texts/atticus-ch2.txt");
+  const textPath = `texts/atticus-ch${currentChapter}.txt`;
+  let response = await fetch(textPath).catch(() => null);
+  if (!response || !response.ok) response = await fetch("texts/atticus-ch2.txt");
   const text = await response.text();
 
   // Normalize escaped-newline sequences and render the cleaned text.
   const normalizedText = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
   renderLatinText(normalizedText);
   attachVocabEvents();
+}
+
+function setChapter(n) {
+  currentChapter = n;
+  document.querySelectorAll('.chapter-btn').forEach(b => b.classList.toggle('active', +b.dataset.ch === n));
+  // reload vocab, notes, text for the chapter
+  (async () => {
+    await loadVocab();
+    await loadNotes();
+    await loadChapter();
+  })();
 }
 
 function renderLatinText(text) {
@@ -399,7 +419,11 @@ function showNoteInPane(noteObj) {
 
 /* ---------- boot ---------- */
 (async () => {
-  await loadVocab();
-  await loadNotes();
-  await loadChapter();
+  // attach chapter button handlers
+  document.querySelectorAll('.chapter-btn').forEach(b => {
+    b.addEventListener('click', () => setChapter(+b.dataset.ch));
+  });
+
+  // load default chapter
+  setChapter(currentChapter);
 })();

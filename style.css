@@ -12,6 +12,22 @@ body {
   width: 100%;
 }
 
+#site-header {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  z-index: 20;
+}
+#chapters { display:flex; gap:0.5rem; }
+.chapter-btn {
+  background: #fff;
+  border: 1px solid #ddd;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.chapter-btn.active { background: #ffe066; }
+
 /* toolbar and debug compare styles removed */
 
 /* --- main Latin text --- */
