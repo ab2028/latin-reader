@@ -84,10 +84,18 @@ function guessLemmaFromHeuristics(word) {
 
 /* ---------- load vocab ---------- */
 async function loadVocab() {
-  // try chapter-specific vocab first, then fall back to global vocab.json
-  const vocabPath = `vocab-ch${currentChapter}.json`;
+  // try chapter-specific vocab in the vocab/ folder first, then fall back
+  // to root-level vocab.json for compatibility
+  const vocabPath = `vocab/vocab-ch${currentChapter}.json`;
   let resp = await fetch(vocabPath).catch(() => null);
-  if (!resp || !resp.ok) resp = await fetch("vocab.json");
+  if (!resp || !resp.ok) {
+    // fallback to root-level vocab.json
+    resp = await fetch("vocab.json").catch(() => null);
+  }
+  if (!resp) {
+    vocabData = {};
+    return;
+  }
   vocabData = await resp.json();
   const vocabList = document.getElementById("vocab-list");
   vocabList.innerHTML = "";
@@ -114,22 +122,40 @@ async function loadVocab() {
 /* ---------- load notes ---------- */
 async function loadNotes() {
   try {
-    // chapter-specific notes fallback
-    const notesPath = `notes-ch${currentChapter}.json`;
+    // chapter-specific notes in notes/ folder, then fallback to root notes.json
+    const notesPath = `notes/notes-ch${currentChapter}.json`;
     let resp = await fetch(notesPath).catch(() => null);
-    if (!resp || !resp.ok) resp = await fetch("notes.json");
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp || !resp.ok) {
+      resp = await fetch("notes.json").catch(() => null);
+    }
+    if (!resp) throw new Error(`Failed to load notes for chapter ${currentChapter}`);
     notesData = await resp.json();
+    // parse notes into pattern segments; support ellipsis (...) as a wildcard
     notesList = Object.entries(notesData).map(([latin_ref, note], idx) => {
-      const tokens = latin_ref
-        .split(/\s+/)
-        .map(normalize)
-        .filter(Boolean);
+      const rawTokens = latin_ref.split(/\s+/).filter(Boolean);
+      const segments = [];
+      let cur = [];
+      for (const rt of rawTokens) {
+        // treat three dots or single ellipsis char as wildcard separators
+        if (rt.includes('...') || rt.includes('\u2026')) {
+          if (cur.length) { segments.push(cur); cur = []; }
+          // wildcard represented by a gap between segments
+          continue;
+        }
+        const n = normalize(rt);
+        if (n) cur.push(n);
+      }
+      if (cur.length) segments.push(cur);
+
+      // flattened tokens (non-wildcard) for backward-compatibility
+      const tokens = segments.flat();
+
       return {
         id: `note-${idx}`,
         latin_ref,
         note,
         tokens,
+        patternSegments: segments,
       };
     });
     // render the notes list into the notes pane so they're always visible
@@ -312,16 +338,44 @@ function findNoteMatches(wordEntries) {
 
   for (const note of notesList) {
     if (!note.tokens.length) continue;
-    for (let i = 0; i <= wordEntries.length - note.tokens.length; i++) {
-      let ok = true;
-      for (let j = 0; j < note.tokens.length; j++) {
-        if (wordEntries[i + j].clean !== note.tokens[j]) {
-          ok = false;
-          break;
-        }
+
+    // If the note has patternSegments (wildcards between segments), attempt
+    // to match each segment in order allowing gaps between them.
+    const segs = note.patternSegments || [note.tokens];
+    // iterate positions where the first segment actually occurs
+    const firstSeg = segs[0];
+    for (let i = 0; i <= wordEntries.length - firstSeg.length; i++) {
+      // check if first segment matches at i
+      let okFirst = true;
+      for (let m = 0; m < firstSeg.length; m++) {
+        if (wordEntries[i + m].clean !== firstSeg[m]) { okFirst = false; break; }
       }
-      if (ok) {
-        matches.push({ start: i, length: note.tokens.length, note });
+      if (!okFirst) continue;
+
+      // first segment matched at i; now try to find subsequent segments after it
+      let cursor = i + firstSeg.length;
+      let lastMatchedEnd = i + firstSeg.length; // exclusive index
+      let allFound = true;
+      for (let s = 1; s < segs.length; s++) {
+        const seg = segs[s];
+        let foundAt = -1;
+        for (let k = cursor; k <= wordEntries.length - seg.length; k++) {
+          let ok = true;
+          for (let m = 0; m < seg.length; m++) {
+            if (wordEntries[k + m].clean !== seg[m]) { ok = false; break; }
+          }
+          if (ok) { foundAt = k; break; }
+        }
+        if (foundAt === -1) { allFound = false; break; }
+        // advance cursor and record end
+        lastMatchedEnd = foundAt + seg.length;
+        cursor = foundAt + seg.length;
+      }
+
+      if (allFound) {
+        const matchStart = i;
+        const matchLength = lastMatchedEnd - matchStart; // inclusive span length
+        matches.push({ start: matchStart, length: matchLength, note });
       }
     }
   }
