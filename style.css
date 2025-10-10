@@ -18,6 +18,8 @@ body {
   padding: 2rem;
   overflow-y: scroll;
   line-height: 1.7;
+  /* Preserve newlines and consecutive spaces from the source text */
+  white-space: pre-wrap;
 }
 
 /* --- right pane split vertically --- */

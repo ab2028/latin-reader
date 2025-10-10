@@ -128,7 +128,14 @@ async function loadChapter() {
   const response = await fetch("texts/atticus-ch2.txt");
   const text = await response.text();
 
-  renderLatinText(text);
+  // Some source files may contain literal backslash-n sequences ("\\n")
+  // rather than actual newline characters. Convert those into real
+  // newlines so the tokenizer and renderer can treat them as line breaks.
+  // Handle both "\\r\\n" (Windows-escaped) and "\\n" forms.
+  let normalizedText = text.replace(/\\r\\n/g, "\n");
+  normalizedText = normalizedText.replace(/\\n/g, "\n");
+
+  renderLatinText(normalizedText);
   attachVocabEvents();
 }
 
