@@ -79,3 +79,13 @@ body {
   display: block;
   margin-top: 0.2rem;
 }
+
+.word.note-available {
+  background: linear-gradient(transparent 70%, #fff8cc 70%);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+
+.word.note-available:hover {
+  background: #fff3b0;
+}
