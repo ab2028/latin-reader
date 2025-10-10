@@ -92,8 +92,16 @@ async function loadVocab() {
     const div = document.createElement("div");
     div.className = "vocab-entry";
     div.dataset.word = lemma.toLowerCase();
-    // display only the definition / headword string (value) as requested
-    div.innerHTML = `${gloss}`;
+    // display the value but make everything before the en dash (–) bold
+    // if an en dash is present. Escape HTML to be safe.
+    if (typeof gloss === 'string' && gloss.indexOf('–') !== -1) {
+      const parts = gloss.split(/–/);
+      const left = parts.shift().trim();
+      const right = parts.join('–').trim();
+      div.innerHTML = `<b>${escapeHtml(left)}</b> – ${escapeHtml(right)}`;
+    } else {
+      div.innerHTML = escapeHtml(gloss);
+    }
     vocabList.appendChild(div);
     vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
   }
