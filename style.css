@@ -81,11 +81,15 @@ body {
 }
 
 .word.note-available {
-  background: linear-gradient(transparent 70%, #fff8cc 70%);
-  border-radius: 2px;
+  background: #fff7c2;
+  border-radius: 3px;
   transition: background 0.2s;
 }
 
 .word.note-available:hover {
-  background: #fff3b0;
+  background: #ffe08a;
+}
+
+.note.flash {
+  box-shadow: 0 0 0 3px rgba(255, 235, 59, 0.4);
 }
