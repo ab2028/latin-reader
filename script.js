@@ -204,9 +204,17 @@ function renderLatinText(text) {
 
       span.textContent = content;
       span.dataset.raw = tokens[tokenIndex].raw;
+      // Prevent native selection starting on shift+mousedown (avoids the
+      // blue/OS-level selection) and handle shift+click to scroll/highlight.
+      span.addEventListener('mousedown', (e) => {
+        if (e.shiftKey) {
+          e.preventDefault();
+        }
+      });
+
       span.addEventListener("click", (e) => {
         if (e.shiftKey) {
-          // prevent text selection caused by shift-click
+          // prevent text selection caused by shift-click (extra safety)
           e.preventDefault();
           e.stopPropagation();
           // find the corresponding note entry and highlight/scroll it
