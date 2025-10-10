@@ -92,7 +92,8 @@ async function loadVocab() {
     const div = document.createElement("div");
     div.className = "vocab-entry";
     div.dataset.word = lemma.toLowerCase();
-    div.innerHTML = `<b>${lemma}</b> — ${gloss}`;
+    // display only the definition / headword string (value) as requested
+    div.innerHTML = `${gloss}`;
     vocabList.appendChild(div);
     vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
   }
