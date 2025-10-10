@@ -2,7 +2,8 @@
 
 let vocabData = {};
 let vocabEntries = [];
-let notesData = {}; // new
+let notesData = {}; // raw notes map from notes.json
+let notesList = []; // processed array of note objects
 const MIN_STEM_LEN = 3;
 
 /* ---------- basic utilities ---------- */
@@ -103,17 +104,23 @@ async function loadNotes() {
     const resp = await fetch("notes.json");
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     notesData = await resp.json();
+    notesList = Object.entries(notesData).map(([latin_ref, note], idx) => {
+      const tokens = latin_ref
+        .split(/\s+/)
+        .map(normalize)
+        .filter(Boolean);
+      return {
+        id: `note-${idx}`,
+        latin_ref,
+        note,
+        tokens,
+      };
+    });
   } catch (err) {
     console.error("Failed to load notes.json", err);
     notesData = {};
+    notesList = [];
   }
-}
-
-function getNoteFor(word) {
-  const w = normalize(word);
-  return Object.values(notesData).find(n =>
-    n.latin_ref.toLowerCase().includes(w)
-  );
 }
 
 /* ---------- main text load ---------- */
@@ -121,42 +128,155 @@ async function loadChapter() {
   const response = await fetch("texts/atticus-ch2.txt");
   const text = await response.text();
 
-  const words = text.split(/\s+/);
+  renderLatinText(text);
+  attachVocabEvents();
+}
+
+function renderLatinText(text) {
   const latinContainer = document.getElementById("latin-text");
   latinContainer.innerHTML = "";
-  const p = document.createElement("p");
 
-  words.forEach((raw) => {
-    const clean = normalize(raw);
+  const { tokens, wordEntries } = tokenizeText(text);
+  const noteMatches = findNoteMatches(wordEntries);
+
+  const fragment = document.createDocumentFragment();
+  let tokenIndex = 0;
+  let wordIndex = 0;
+
+  while (tokenIndex < tokens.length) {
+    const token = tokens[tokenIndex];
+
+    if (token.type === "space") {
+      fragment.appendChild(document.createTextNode(token.raw));
+      tokenIndex++;
+      continue;
+    }
+
+    const match = noteMatches.get(wordIndex);
+    if (match) {
+      const span = document.createElement("span");
+      span.classList.add("word", "note-available", "note-phrase");
+      span.dataset.noteId = match.note.id;
+      span.title = match.note.note;
+
+      let wordsCovered = 0;
+      let j = tokenIndex;
+      let content = "";
+      while (j < tokens.length && wordsCovered < match.length) {
+        const innerToken = tokens[j];
+        content += innerToken.raw;
+        if (innerToken.type === "word") wordsCovered++;
+        j++;
+      }
+
+      span.textContent = content;
+      span.dataset.raw = tokens[tokenIndex].raw;
+      span.addEventListener("click", (e) => {
+        if (e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          showNoteInPane(match.note);
+        }
+      });
+
+      fragment.appendChild(span);
+      tokenIndex = j;
+      wordIndex += match.length;
+      continue;
+    }
+
     const span = document.createElement("span");
     span.className = "word";
-    span.dataset.raw = raw;
-    span.textContent = raw + " ";
+    span.dataset.raw = token.raw;
+    span.textContent = token.raw;
 
-    // vocab tooltip
-    if (vocabData[clean]) {
-      span.title = vocabData[clean];
+    const tooltip = resolveVocabTooltip(token.clean);
+    if (tooltip) span.title = tooltip;
+
+    fragment.appendChild(span);
+    tokenIndex++;
+    wordIndex++;
+  }
+
+  const p = document.createElement("p");
+  p.appendChild(fragment);
+  latinContainer.appendChild(p);
+}
+
+function tokenizeText(text) {
+  const rawTokens = text.match(/\S+|\s+/g) || [];
+  const tokens = [];
+  const wordEntries = [];
+
+  rawTokens.forEach((raw) => {
+    if (/^\s+$/.test(raw)) {
+      tokens.push({ type: "space", raw });
     } else {
-      const lemma = guessLemmaFromHeuristics(clean);
-      if (lemma && vocabData[lemma]) span.title = vocabData[lemma];
+      const entry = {
+        type: "word",
+        raw,
+        clean: normalize(raw),
+        wordIndex: wordEntries.length,
+      };
+      tokens.push(entry);
+      wordEntries.push(entry);
     }
-
-    // note check
-    const noteObj = getNoteFor(clean);
-    if (noteObj) {
-      span.classList.add("note-available");
-      span.title = noteObj.note; // hover shows note
-      // Shift-click reveals note in Notes pane
-      span.addEventListener("click", (e) => {
-        if (e.shiftKey) showNoteInPane(noteObj);
-      });
-    }
-
-    p.appendChild(span);
   });
 
-  latinContainer.appendChild(p);
-  attachVocabEvents();
+  return { tokens, wordEntries };
+}
+
+function findNoteMatches(wordEntries) {
+  const matches = [];
+
+  for (const note of notesList) {
+    if (!note.tokens.length) continue;
+    for (let i = 0; i <= wordEntries.length - note.tokens.length; i++) {
+      let ok = true;
+      for (let j = 0; j < note.tokens.length; j++) {
+        if (wordEntries[i + j].clean !== note.tokens[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        matches.push({ start: i, length: note.tokens.length, note });
+      }
+    }
+  }
+
+  matches.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    return a.start - b.start;
+  });
+
+  const occupied = new Set();
+  const map = new Map();
+
+  for (const match of matches) {
+    let conflict = false;
+    for (let i = 0; i < match.length; i++) {
+      if (occupied.has(match.start + i)) {
+        conflict = true;
+        break;
+      }
+    }
+    if (conflict) continue;
+    for (let i = 0; i < match.length; i++) {
+      occupied.add(match.start + i);
+    }
+    map.set(match.start, match);
+  }
+
+  return map;
+}
+
+function resolveVocabTooltip(cleanWord) {
+  if (!cleanWord) return "";
+  if (vocabData[cleanWord]) return vocabData[cleanWord];
+  const lemma = guessLemmaFromHeuristics(cleanWord);
+  if (lemma && vocabData[lemma]) return vocabData[lemma];
+  return "";
 }
 
 /* ---------- vocab interactions ---------- */
@@ -196,10 +316,22 @@ function attachVocabEvents() {
 /* ---------- note display ---------- */
 function showNoteInPane(noteObj) {
   const notesPane = document.getElementById("notes-content");
-  const noteDiv = document.createElement("div");
-  noteDiv.className = "note";
-  noteDiv.innerHTML = `<b>${noteObj.latin_ref}</b><p>${noteObj.note}</p>`;
-  notesPane.prepend(noteDiv);
+  const placeholder = Array.from(notesPane.children).find(
+    (child) => child.tagName === "P"
+  );
+  if (placeholder) placeholder.remove();
+
+  let noteDiv = notesPane.querySelector(`[data-note-id="${noteObj.id}"]`);
+  if (!noteDiv) {
+    noteDiv = document.createElement("div");
+    noteDiv.className = "note";
+    noteDiv.dataset.noteId = noteObj.id;
+    noteDiv.innerHTML = `<b>${noteObj.latin_ref}</b><p>${noteObj.note}</p>`;
+    notesPane.prepend(noteDiv);
+  }
+
+  noteDiv.classList.add("flash");
+  setTimeout(() => noteDiv.classList.remove("flash"), 600);
   noteDiv.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
