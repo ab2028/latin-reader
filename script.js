@@ -116,11 +116,42 @@ async function loadNotes() {
         tokens,
       };
     });
+    // render the notes list into the notes pane so they're always visible
+    renderNotesList();
   } catch (err) {
     console.error("Failed to load notes.json", err);
     notesData = {};
     notesList = [];
   }
+}
+
+function renderNotesList() {
+  const notesPane = document.getElementById('notes-content');
+  notesPane.innerHTML = "";
+  for (const note of notesList) {
+    const div = document.createElement('div');
+    div.className = 'note-entry';
+    div.dataset.noteId = note.id;
+    // show latin_ref bold then the note text; preserve line breaks in note
+    div.innerHTML = `<b>${escapeHtml(note.latin_ref)}</b><div class="note-text">${escapeHtml(note.note)}</div>`;
+    // clicking a note entry should highlight it (and optionally could jump to text)
+    div.addEventListener('click', () => {
+      div.classList.add('highlight');
+      setTimeout(() => div.classList.remove('highlight'), 1200);
+      div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    notesPane.appendChild(div);
+  }
+}
+
+function escapeHtml(s) {
+  return (s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\n/g, '<br>');
 }
 
 /* ---------- main text load ---------- */
@@ -175,9 +206,20 @@ function renderLatinText(text) {
       span.dataset.raw = tokens[tokenIndex].raw;
       span.addEventListener("click", (e) => {
         if (e.shiftKey) {
+          // prevent text selection caused by shift-click
           e.preventDefault();
           e.stopPropagation();
-          showNoteInPane(match.note);
+          // find the corresponding note entry and highlight/scroll it
+          const notesPane = document.getElementById('notes-content');
+          const target = notesPane.querySelector(`.note-entry[data-note-id="${match.note.id}"]`);
+          if (target) {
+            target.classList.add('highlight');
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => target.classList.remove('highlight'), 1200);
+          } else {
+            // fallback: show as transient note
+            showNoteInPane(match.note);
+          }
         }
       });
 
@@ -317,24 +359,23 @@ function attachVocabEvents() {
 
 /* ---------- note display ---------- */
 function showNoteInPane(noteObj) {
-  const notesPane = document.getElementById("notes-content");
-  const placeholder = Array.from(notesPane.children).find(
-    (child) => child.tagName === "P"
-  );
-  if (placeholder) placeholder.remove();
-
-  let noteDiv = notesPane.querySelector(`[data-note-id="${noteObj.id}"]`);
-  if (!noteDiv) {
-    noteDiv = document.createElement("div");
-    noteDiv.className = "note";
-    noteDiv.dataset.noteId = noteObj.id;
-    noteDiv.innerHTML = `<b>${noteObj.latin_ref}</b><p>${noteObj.note}</p>`;
-    notesPane.prepend(noteDiv);
+  const notesPane = document.getElementById('notes-content');
+  const existing = notesPane.querySelector(`.note-entry[data-note-id="${noteObj.id}"]`);
+  if (existing) {
+    existing.classList.add('highlight');
+    setTimeout(() => existing.classList.remove('highlight'), 1200);
+    existing.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
   }
 
-  noteDiv.classList.add("flash");
-  setTimeout(() => noteDiv.classList.remove("flash"), 600);
-  noteDiv.scrollIntoView({ behavior: "smooth", block: "center" });
+  // fallback: briefly show a transient note (rare if notes are rendered)
+  const tmp = document.createElement('div');
+  tmp.className = 'note-entry';
+  tmp.innerHTML = `<b>${escapeHtml(noteObj.latin_ref)}</b><div class="note-text">${escapeHtml(noteObj.note)}</div>`;
+  notesPane.prepend(tmp);
+  tmp.classList.add('highlight');
+  setTimeout(() => tmp.classList.remove('highlight'), 1200);
+  setTimeout(() => tmp.remove(), 3000);
 }
 
 

@@ -41,6 +41,18 @@ body {
   padding: 1rem;
 }
 
+/* render notes like vocab entries: persistent list */
+.note-entry {
+  margin-bottom: 0.4rem;
+  padding: 0.4rem;
+  border-radius: 4px;
+  background: #fffdf4;
+  border-left: 3px solid #ffeb3b;
+}
+.note-entry b { display: block; margin-bottom: 0.25rem; }
+.note-text { white-space: pre-wrap; color: #111; }
+.note-entry.highlight { background: #ffe066; }
+
 /* bottom half = vocab */
 #vocab {
   flex: 1;
