@@ -110,9 +110,9 @@ async function loadVocab() {
       const parts = gloss.split(/–/);
       const left = parts.shift().trim();
       const right = parts.join('–').trim();
-      div.innerHTML = `<b>${escapeHtml(left)}</b> – ${escapeHtml(right)}`;
+      div.innerHTML = `<b>${renderRichText(left)}</b> – ${renderRichText(right)}`;
     } else {
-      div.innerHTML = escapeHtml(gloss);
+      div.innerHTML = renderRichText(gloss);
     }
     vocabList.appendChild(div);
     vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
@@ -175,7 +175,7 @@ function renderNotesList() {
     div.className = 'note-entry';
     div.dataset.noteId = note.id;
     // show latin_ref bold then the note text; preserve line breaks in note
-    div.innerHTML = `<b>${escapeHtml(note.latin_ref)}</b><div class="note-text">${escapeHtml(note.note)}</div>`;
+  div.innerHTML = `<b>${renderRichText(note.latin_ref)}</b><div class="note-text">${renderRichText(note.note)}</div>`;
     // clicking a note entry should highlight it (and optionally could jump to text)
     div.addEventListener('click', () => {
       div.classList.add('highlight');
@@ -194,6 +194,21 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
     .replace(/\n/g, '<br>');
+}
+
+// Render a tiny subset of Markdown (bold ** and italics *) safely.
+// We escape first, then convert marks to tags. This prevents HTML injection
+// while allowing authors to use *italic* and **bold** in JSON values.
+function renderRichText(raw) {
+  if (!raw && raw !== 0) return '';
+  let s = escapeHtml(String(raw));
+
+  // Replace strong (**text**) first, non-greedy
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Then italics (*text*) — avoid matching inside already converted strong tags
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  return s;
 }
 
 /* ---------- main text load ---------- */
