@@ -99,8 +99,14 @@ async function loadVocab() {
 
 /* ---------- load notes ---------- */
 async function loadNotes() {
-  const resp = await fetch("notes.json");
-  notesData = await resp.json();
+  try {
+    const resp = await fetch("notes.json");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    notesData = await resp.json();
+  } catch (err) {
+    console.error("Failed to load notes.json", err);
+    notesData = {};
+  }
 }
 
 function getNoteFor(word) {
