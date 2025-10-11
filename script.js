@@ -537,7 +537,26 @@ function attachVocabEvents() {
     span.addEventListener("click", (e) => {
       if (e.shiftKey) return; // shift is reserved for notes
       entries.forEach(e => e.classList.remove("highlight"));
-      const entry = findVocabEntryForWord(span.dataset.raw);
+
+      const rawCandidates = [];
+      if (span.dataset.raw) rawCandidates.push(span.dataset.raw);
+      if (span.dataset.raws) {
+        for (const token of span.dataset.raws.split('\t')) {
+          if (token && !rawCandidates.includes(token)) rawCandidates.push(token);
+        }
+      }
+      if (!rawCandidates.length && span.textContent) {
+        span.textContent.split(/\s+/).forEach(tok => {
+          if (tok && !rawCandidates.includes(tok)) rawCandidates.push(tok);
+        });
+      }
+
+      let entry = null;
+      for (const raw of rawCandidates) {
+        entry = findVocabEntryForWord(raw);
+        if (entry) break;
+      }
+
       if (entry) {
         entry.scrollIntoView({ behavior: "smooth", block: "center" });
         entry.classList.add("highlight");
