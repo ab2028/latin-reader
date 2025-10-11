@@ -328,64 +328,56 @@ function renderLatinText(text) {
 
     const match = noteMatches.get(wordIndex);
     if (match) {
-      const span = document.createElement("span");
-      span.classList.add("word", "note-available", "note-phrase");
-      span.dataset.noteId = match.note.id;
-      span.title = match.note.note;
-
       let wordsCovered = 0;
       let j = tokenIndex;
-      let content = "";
       while (j < tokens.length && wordsCovered < match.length) {
         const innerToken = tokens[j];
-        content += innerToken.raw;
-        if (innerToken.type === "word") wordsCovered++;
+        if (innerToken.type === 'word') {
+          const wordSpan = document.createElement('span');
+          wordSpan.classList.add('word', 'note-available');
+          wordSpan.dataset.noteId = match.note.id;
+          wordSpan.dataset.noteText = match.note.note;
+          wordSpan.dataset.raw = innerToken.raw;
+          wordSpan.textContent = innerToken.raw;
+
+          const tooltip = resolveVocabTooltip(innerToken.clean);
+          if (tooltip) {
+            wordSpan.title = tooltip;
+          } else if (match.note.note) {
+            wordSpan.title = match.note.note;
+          }
+
+          wordSpan.addEventListener('mousedown', (e) => {
+            if (e.shiftKey) {
+              e.preventDefault();
+            }
+          });
+
+          wordSpan.addEventListener('click', (e) => {
+            if (e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              const notesPane = document.getElementById('notes-content');
+              const target = notesPane.querySelector(`.note-entry[data-note-id="${match.note.id}"]`);
+              if (target) {
+                target.classList.add('highlight');
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(() => target.classList.remove('highlight'), 1200);
+              } else {
+                showNoteInPane(match.note);
+              }
+              return;
+            }
+          });
+
+          fragment.appendChild(wordSpan);
+          wordsCovered++;
+        } else {
+          fragment.appendChild(document.createTextNode(innerToken.raw));
+        }
         j++;
       }
 
-      span.textContent = content;
-      // collect the raw strings of each word inside this matched phrase so
-      // vocab lookups can try each word individually (not just the first).
-      const wordRaws = [];
-      for (let k = tokenIndex; k < j; k++) {
-        const tk = tokens[k];
-        if (tk.type === 'word') wordRaws.push(tk.raw);
-      }
-      span.dataset.raws = wordRaws.join('\t');
-      span.dataset.raw = wordRaws[0] || tokens[tokenIndex].raw;
-      // Prevent native selection starting on shift+mousedown (avoids the
-      // blue/OS-level selection) and handle shift+click to scroll/highlight.
-      span.addEventListener('mousedown', (e) => {
-        if (e.shiftKey) {
-          e.preventDefault();
-        }
-      });
-
-      span.addEventListener("click", (e) => {
-        if (e.shiftKey) {
-          // prevent text selection caused by shift-click (extra safety)
-          e.preventDefault();
-          e.stopPropagation();
-          // find the corresponding note entry and highlight/scroll it
-          const notesPane = document.getElementById('notes-content');
-          const target = notesPane.querySelector(`.note-entry[data-note-id="${match.note.id}"]`);
-          if (target) {
-            target.classList.add('highlight');
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setTimeout(() => target.classList.remove('highlight'), 1200);
-          } else {
-            // fallback: show as transient note
-            showNoteInPane(match.note);
-          }
-          return;
-        }
-        // For non-shift clicks, do nothing here — allow the general
-        // `.word` click handler (attached by attachVocabEvents) to run and
-        // perform the vocabulary lookup/highlight. Avoid stopping
-        // propagation so the other handler can run.
-      });
-
-      fragment.appendChild(span);
       tokenIndex = j;
       wordIndex += match.length;
       continue;
