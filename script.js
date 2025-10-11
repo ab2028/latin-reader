@@ -84,6 +84,7 @@ function guessLemmaFromHeuristics(word) {
 
 /* ---------- load vocab ---------- */
 async function loadVocab() {
+  console.log(`loadVocab: loading chapter ${currentChapter}`);
   // try chapter-specific vocab in the vocab/ folder first, then fall back
   // to root-level vocab.json for compatibility
   const vocabPath = `vocab/vocab-ch${currentChapter}.json`;
@@ -92,11 +93,21 @@ async function loadVocab() {
     // fallback to root-level vocab.json
     resp = await fetch("vocab.json").catch(() => null);
   }
-  if (!resp) {
+  if (!resp || !resp.ok) {
     vocabData = {};
+    const vocabList = document.getElementById("vocab-list");
+    if (vocabList) vocabList.innerHTML = `<p><em>Vocabulary not available for chapter ${currentChapter}. If you opened the file directly in the browser (file://), fetch() will fail — try running a local server, e.g. <code>python3 -m http.server 8000</code>.</em></p>`;
     return;
   }
-  vocabData = await resp.json();
+  try {
+    vocabData = await resp.json();
+  } catch (err) {
+    console.error('Failed to parse vocab JSON', err);
+    vocabData = {};
+    const vocabList = document.getElementById("vocab-list");
+    if (vocabList) vocabList.innerHTML = `<p><em>Vocabulary could not be parsed for chapter ${currentChapter}.</em></p>`;
+    return;
+  }
   const vocabList = document.getElementById("vocab-list");
   vocabList.innerHTML = "";
   vocabEntries = [];
@@ -106,16 +117,20 @@ async function loadVocab() {
     div.dataset.word = lemma.toLowerCase();
     // display the value but make everything before the en dash (–) bold
     // if an en dash is present. Escape HTML to be safe.
-    if (typeof gloss === 'string' && gloss.indexOf('–') !== -1) {
-      const parts = gloss.split(/–/);
+    if (typeof gloss === 'string' && gloss.indexOf(':') !== -1) {
+      const parts = gloss.split(/:/);
       const left = parts.shift().trim();
-      const right = parts.join('–').trim();
-      div.innerHTML = `<b>${renderRichText(left)}</b> – ${renderRichText(right)}`;
+      const right = parts.join(':').trim();
+      div.innerHTML = `<b>${renderRichText(left)}</b>: ${renderRichText(right)}`;
     } else {
       div.innerHTML = renderRichText(gloss);
     }
     vocabList.appendChild(div);
     vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
+  }
+  console.log(`loadVocab: loaded ${vocabEntries.length} entries for chapter ${currentChapter}`);
+  if (vocabEntries.length === 0 && vocabList) {
+    vocabList.innerHTML = `<p><em>No vocabulary entries found for chapter ${currentChapter}.</em></p>`;
   }
 }
 
@@ -128,8 +143,24 @@ async function loadNotes() {
     if (!resp || !resp.ok) {
       resp = await fetch("notes.json").catch(() => null);
     }
-    if (!resp) throw new Error(`Failed to load notes for chapter ${currentChapter}`);
-    notesData = await resp.json();
+    if (!resp || !resp.ok) {
+      // show user-friendly message in the notes pane
+      notesData = {};
+      notesList = [];
+      const notesPane = document.getElementById('notes-content');
+      if (notesPane) notesPane.innerHTML = `<p><em>Notes not available for chapter ${currentChapter}. If resources fail to load, try running a local server (e.g. <code>python3 -m http.server 8000</code>).</em></p>`;
+      return;
+    }
+    try {
+      notesData = await resp.json();
+    } catch (err) {
+      console.error('Failed to parse notes JSON', err);
+      notesData = {};
+      notesList = [];
+      const notesPane = document.getElementById('notes-content');
+      if (notesPane) notesPane.innerHTML = `<p><em>Notes could not be parsed for chapter ${currentChapter}.</em></p>`;
+      return;
+    }
     // parse notes into pattern segments; support ellipsis (...) as a wildcard
     notesList = Object.entries(notesData).map(([latin_ref, note], idx) => {
       const rawTokens = latin_ref.split(/\s+/).filter(Boolean);
@@ -175,7 +206,20 @@ function renderNotesList() {
     div.className = 'note-entry';
     div.dataset.noteId = note.id;
     // show latin_ref bold then the note text; preserve line breaks in note
-  div.innerHTML = `<b>${renderRichText(note.latin_ref)}</b><div class="note-text">${renderRichText(note.note)}</div>`;
+    // If the latin_ref is very long, shorten the displayed heading to
+    // a compact 'first ... last' form. We show up to MAX_DISPLAY words
+    // (default 12) by combining the first half and last half when needed.
+    const MAX_DISPLAY = 12;
+    const words = (note.latin_ref || '').split(/\s+/).filter(Boolean);
+    let displayRef = note.latin_ref || '';
+    if (words.length > MAX_DISPLAY) {
+      const head = Math.ceil(MAX_DISPLAY / 2);
+      const tail = Math.floor(MAX_DISPLAY / 2);
+      const left = words.slice(0, head).join(' ');
+      const right = words.slice(words.length - tail).join(' ');
+      displayRef = `${left} … ${right}`;
+    }
+    div.innerHTML = `<b>${renderRichText(displayRef)}</b><div class="note-text">${renderRichText(note.note)}</div>`;
     // clicking a note entry should highlight it (and optionally could jump to text)
     div.addEventListener('click', () => {
       div.classList.add('highlight');
@@ -214,14 +258,41 @@ function renderRichText(raw) {
 /* ---------- main text load ---------- */
 async function loadChapter() {
   const textPath = `texts/atticus-ch${currentChapter}.txt`;
-  let response = await fetch(textPath).catch(() => null);
-  if (!response || !response.ok) response = await fetch("texts/atticus-ch2.txt");
-  const text = await response.text();
+  try {
+    let response = await fetch(textPath).catch(() => null);
+    let text = null;
+    if (!response || !response.ok) {
+      // try a sensible fallback (chapter 2) if the chapter file isn't present
+      const fallback = await fetch("texts/atticus-ch2.txt").catch(() => null);
+      if (fallback && fallback.ok) {
+        text = await fallback.text();
+      } else {
+        // nothing available — show a friendly message
+        const latinContainer = document.getElementById("latin-text");
+        if (latinContainer) {
+          latinContainer.innerHTML = `<p><em>Sorry — text for chapter ${currentChapter} is not available.</em></p>`;
+        }
+        // still wire up vocab events (they may be empty) and return
+        attachVocabEvents();
+        return;
+      }
+    } else {
+      text = await response.text();
+    }
 
-  // Normalize escaped-newline sequences and render the cleaned text.
-  const normalizedText = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
-  renderLatinText(normalizedText);
-  attachVocabEvents();
+    // Normalize escaped-newline sequences and render the cleaned text.
+    const normalizedText = text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+    renderLatinText(normalizedText);
+    // reset scroll to top of reading pane for new chapter
+    const latinContainer = document.getElementById("latin-text");
+    if (latinContainer) latinContainer.scrollTop = 0;
+    attachVocabEvents();
+  } catch (err) {
+    console.error('Error loading chapter', err);
+    const latinContainer = document.getElementById("latin-text");
+    if (latinContainer) latinContainer.innerHTML = `<p><em>Failed to load chapter ${currentChapter}.</em></p>`;
+    attachVocabEvents();
+  }
 }
 
 function setChapter(n) {
@@ -273,7 +344,15 @@ function renderLatinText(text) {
       }
 
       span.textContent = content;
-      span.dataset.raw = tokens[tokenIndex].raw;
+      // collect the raw strings of each word inside this matched phrase so
+      // vocab lookups can try each word individually (not just the first).
+      const wordRaws = [];
+      for (let k = tokenIndex; k < j; k++) {
+        const tk = tokens[k];
+        if (tk.type === 'word') wordRaws.push(tk.raw);
+      }
+      span.dataset.raws = wordRaws.join('\t');
+      span.dataset.raw = wordRaws[0] || tokens[tokenIndex].raw;
       // Prevent native selection starting on shift+mousedown (avoids the
       // blue/OS-level selection) and handle shift+click to scroll/highlight.
       span.addEventListener('mousedown', (e) => {
@@ -298,7 +377,12 @@ function renderLatinText(text) {
             // fallback: show as transient note
             showNoteInPane(match.note);
           }
+          return;
         }
+        // For non-shift clicks, do nothing here — allow the general
+        // `.word` click handler (attached by attachVocabEvents) to run and
+        // perform the vocabulary lookup/highlight. Avoid stopping
+        // propagation so the other handler can run.
       });
 
       fragment.appendChild(span);
@@ -463,6 +547,46 @@ function attachVocabEvents() {
   });
 }
 
+// Delegated click handler on the main latin text container. This is
+// robust against per-span event ordering or accidental stopPropagation
+// from other handlers. It will only act on non-shift clicks and will
+// highlight the first matching vocab entry for the clicked word.
+let _latinDelegatedAttached = false;
+function attachDelegatedLatinClick() {
+  if (_latinDelegatedAttached) return;
+  const latin = document.getElementById('latin-text');
+  if (!latin) return;
+  latin.addEventListener('click', (e) => {
+    if (e.shiftKey) return; // keep shift for notes
+    const span = e.target.closest && e.target.closest('.word');
+    if (!span || !latin.contains(span)) return;
+    // find vocab entry using dataset.raw or the first token
+    // Build an array of candidate tokens from the clicked span. If the
+    // span stored multiple raws (for multi-word phrases) try them in
+    // order left-to-right, then right-to-left as a fallback.
+    const rawCandidates = span.dataset.raws ? span.dataset.raws.split('\t') : [(span.dataset.raw || (span.textContent || '').split(/\s+/)[0])];
+    let foundEntry = null;
+    for (const c of rawCandidates) {
+      const e = findVocabEntryForWord(c);
+      if (e) { foundEntry = e; break; }
+    }
+    if (!foundEntry) {
+      for (let i = rawCandidates.length - 1; i >= 0; i--) {
+        const e = findVocabEntryForWord(rawCandidates[i]);
+        if (e) { foundEntry = e; break; }
+      }
+    }
+    if (foundEntry) {
+      // clear previous highlights
+      document.querySelectorAll('.vocab-entry.highlight').forEach(x => x.classList.remove('highlight'));
+      foundEntry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      foundEntry.classList.add('highlight');
+      setTimeout(() => foundEntry.classList.remove('highlight'), 2000);
+    }
+  });
+  _latinDelegatedAttached = true;
+}
+
 /* ---------- note display ---------- */
 function showNoteInPane(noteObj) {
   const notesPane = document.getElementById('notes-content');
@@ -492,6 +616,9 @@ function showNoteInPane(noteObj) {
   document.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => setChapter(+b.dataset.ch));
   });
+
+  // attach delegated click handler for vocab lookups
+  attachDelegatedLatinClick();
 
   // load default chapter
   setChapter(currentChapter);
