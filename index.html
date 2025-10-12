@@ -20,6 +20,10 @@
         <button class="chapter-btn" data-ch="22">Chapter 22</button>
       </nav>
     </header>
+    <!-- top-center instructions button -->
+    <div id="instructions-anchor">
+      <button id="instructions-btn" aria-haspopup="dialog" aria-controls="instructions-modal">Instructions</button>
+    </div>
     <!-- Latin text -->
     <main id="latin-text">
       <p>Loading Latin text…</p>
@@ -34,6 +38,9 @@
         </div>
       </section>
 
+      <!-- separator between notes and vocab (non-scrolling) -->
+      <div class="notes-vocab-sep" aria-hidden="true"></div>
+
       <section id="vocab">
         <h2>Vocabulary</h2>
         <div id="vocab-list"></div>
@@ -42,5 +49,25 @@
   </div>
 
   <script src="script.js"></script>
+  <!-- Inline modal for instructions -->
+  <div id="instructions-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-overlay" data-action="close"></div>
+    <div class="modal-content" role="document">
+      <header class="modal-header">
+        <h3>Instructions</h3>
+        <button class="modal-close" aria-label="Close instructions" data-action="close">✕</button>
+      </header>
+      <div class="modal-body">
+        <p>Welcome — quick tips:</p>
+        <ul>
+          <li>Use the chapter buttons (top-left) to load a chapter.</li>
+          <li>Click any word to jump to its vocabulary entry on the right.</li>
+          <li>Shift+click a highlighted phrase in the text to open the corresponding note in the notes pane.</li>
+          <li>If files dont load in the browser, run a local server (e.g. <code>python3 -m http.server 8000</code>).</li>
+        </ul>
+        <p>These instructions can be dismissed by clicking outside, pressing Esc, or using the close button.</p>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

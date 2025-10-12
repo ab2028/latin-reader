@@ -29,6 +29,56 @@ body {
   align-items: center;
 }
 
+/* instructions button centered at the top */
+#instructions-anchor {
+  position: absolute;
+  left: 50%;
+  top: 1rem;
+  transform: translateX(-50%);
+  z-index: 50; /* above header */
+  margin-left: 200px; /* nudge a bit to the right */
+}
+#instructions-btn {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,250,240,0.95));
+  border: 1px solid rgba(120,100,80,0.08);
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(40,25,10,0.06);
+}
+#instructions-btn:hover { color: var(--ink); transform: translateY(-2px); }
+
+/* Modal (instructions) */
+.modal { display: none; }
+.modal[aria-hidden="false"] { display: block; }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,8,6,0.42);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+}
+.modal-content {
+  position: fixed;
+  left: 50%;
+  top: 12%;
+  transform: translateX(-50%);
+  width: min(720px, 92%);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 1rem 1rem 1.2rem 1rem;
+  box-shadow: 0 20px 60px rgba(20,12,6,0.28);
+  z-index: 110;
+}
+.modal-header { display:flex; align-items:center; justify-content:space-between; gap:0.6rem; }
+.modal-header h3 { margin: 0; }
+.modal-close { background: transparent; border: 0; font-size: 1.05rem; cursor: pointer; color: var(--muted); }
+.modal-body { margin-top: 0.6rem; color: var(--ink); }
+.modal-body ul { margin: 0.35rem 0 0.6rem 1.1rem; }
+
+
 /* nice pill panel for chapters */
 #chapters {
   display: flex;
@@ -94,8 +144,37 @@ body {
 #notes {
   flex: 1;
   overflow-y: auto;
-  border-bottom: 1px solid rgba(120,100,80,0.04);
+  border-bottom: 1px solid rgba(120,100,80,0.06);
   padding: 1rem 0.6rem;
+}
+
+/* a non-scrolling separator that visually divides notes and vocab */
+.notes-vocab-sep {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  position: relative;
+}
+.notes-vocab-sep::before {
+  content: "";
+  width: calc(100% - 1.2rem);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(20,16,12,0.02), rgba(20,16,12,0.06), rgba(20,16,12,0.02));
+  border-radius: 1px;
+}
+.notes-vocab-sep::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background: var(--accent-strong);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(20,16,12,0.08);
 }
 
 /* render notes like vocab entries: persistent list */
@@ -155,15 +234,46 @@ body {
   margin-top: 0.2rem;
 }
 
-.word.note-available {
-  background: rgba(255,247,200,0.9);
-  border-radius: 6px;
-  transition: background 0.18s, transform 0.12s;
-}
-
 .word.note-available:hover {
   background: rgba(255,224,138,0.95);
   transform: translateY(-1px) scale(1.01);
+}
+
+/* Use an absolutely-positioned pseudo-element to render the highlight
+   so it doesn't affect document flow or spacing. The pseudo-element
+   extends slightly beyond the word to visually merge with adjacent
+   highlights. */
+.word.note-available {
+  position: relative; /* establish a containing block for ::before */
+  z-index: 1; /* keep text above the highlight */
+}
+.word.note-available::before {
+  content: "";
+  position: absolute;
+  left: -0.18rem;
+  right: -0.18rem;
+  top: 0.12rem;
+  bottom: 0.12rem;
+  background: rgba(255,247,200,0.96);
+  border-radius: 6px;
+  z-index: -1; /* sit behind the text */
+  transition: background 0.18s, transform 0.12s;
+  pointer-events: none;
+}
+.word.note-available:hover::before {
+  background: rgba(255,224,138,0.95);
+  transform: translateY(-1px) scale(1.01);
+}
+
+/* When hovering any word in a note phrase, darken the entire phrase */
+.word.note-available.note-hover::before {
+  background: rgba(255,216,120,0.98);
+}
+
+/* The specific word under the cursor gets a slightly stronger accent */
+.word.note-available.note-hover-word::before {
+  background: rgba(246,195,36,0.98);
+  box-shadow: 0 2px 8px rgba(246,195,36,0.12);
 }
 
 .note.flash {
@@ -185,4 +295,5 @@ body {
   /* mobile: keep some extra top margin so the compact header doesn't overlap */
   #latin-text { padding: 1.2rem; margin: 2.6rem 0.8rem 0.8rem 0.8rem; }
   #right-pane { display: none; }
+  #instructions-anchor { top: 0.8rem; }
 }

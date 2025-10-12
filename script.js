@@ -121,9 +121,19 @@ async function loadVocab() {
       const parts = gloss.split(/:/);
       const left = parts.shift().trim();
       const right = parts.join(':').trim();
-      div.innerHTML = `<b>${renderRichText(left)}</b>: ${renderRichText(right)}`;
+      // If the left part ends with one or more parenthetical groups, pull
+      // them out so they are not included in the bolded text. Example:
+      // "faciō (v.t.)" -> bold "faciō" and render "(v.t.)" unbolded.
+      const m = left.match(/^(.*?)(\s*(?:\([^)]*\)\s*)+)$/);
+      if (m) {
+        const mainLeft = m[1].trim();
+        const trailingParens = m[2].trim();
+        div.innerHTML = `<b>${renderVocabText(mainLeft)}</b> ${renderVocabText(trailingParens)}: ${renderVocabText(right)}`;
+      } else {
+        div.innerHTML = `<b>${renderVocabText(left)}</b>: ${renderVocabText(right)}`;
+      }
     } else {
-      div.innerHTML = renderRichText(gloss);
+      div.innerHTML = renderVocabText(gloss);
     }
     vocabList.appendChild(div);
     vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
@@ -247,13 +257,47 @@ function renderRichText(raw) {
   if (!raw && raw !== 0) return '';
   let s = escapeHtml(String(raw));
 
-  // Replace strong (**text**) first, non-greedy
+  // Replace strong (**text**) first (non-greedy)
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
   // Then italics (*text*) — avoid matching inside already converted strong tags
   s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
   return s;
 }
+
+// Vocab-specific renderer: uses the safe markdown-like renderer then
+// italicizes parenthetical abbreviations (e.g. "(v.t.)") so vocab
+// entries show those abbreviations in italics without affecting notes.
+function renderVocabText(raw) {
+  let s = renderRichText(raw);
+  // scan and wrap parenthetical segments whose inner text ends with a dot
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const open = s.indexOf('(', i);
+    if (open === -1) { out += s.slice(i); break; }
+    out += s.slice(i, open);
+    const close = s.indexOf(')', open + 1);
+    if (close === -1) { out += s.slice(open); break; }
+    const inner = s.slice(open + 1, close);
+    const innerTrim = inner.trim();
+    // skip if inner already contains html tags
+    if (/[<]\/?.+?>/.test(inner)) {
+      out += s.slice(open, close + 1);
+      i = close + 1;
+      continue;
+    }
+    if (innerTrim.endsWith('.')) {
+      out += `<em>(${innerTrim})</em>`;
+    } else {
+      out += s.slice(open, close + 1);
+    }
+    i = close + 1;
+  }
+  return out;
+}
+
 
 /* ---------- main text load ---------- */
 async function loadChapter() {
@@ -328,6 +372,9 @@ function renderLatinText(text) {
 
     const match = noteMatches.get(wordIndex);
     if (match) {
+      // create a stable group id for this matched phrase so we can
+      // highlight all constituent words together on hover
+      const groupId = `${match.note.id}-${tokenIndex}`;
       let wordsCovered = 0;
       let j = tokenIndex;
       while (j < tokens.length && wordsCovered < match.length) {
@@ -336,15 +383,18 @@ function renderLatinText(text) {
           const wordSpan = document.createElement('span');
           wordSpan.classList.add('word', 'note-available');
           wordSpan.dataset.noteId = match.note.id;
+          wordSpan.dataset.noteGroup = groupId;
           wordSpan.dataset.noteText = match.note.note;
           wordSpan.dataset.raw = innerToken.raw;
           wordSpan.textContent = innerToken.raw;
 
           const tooltip = resolveVocabTooltip(innerToken.clean);
-          if (tooltip) {
-            wordSpan.title = tooltip;
-          } else if (match.note.note) {
+          // Prefer showing the note text for note-available words on hover.
+          // Fall back to the vocab tooltip only if no note exists.
+          if (match.note && match.note.note) {
             wordSpan.title = match.note.note;
+          } else if (tooltip) {
+            wordSpan.title = tooltip;
           }
 
           wordSpan.addEventListener('mousedown', (e) => {
@@ -368,6 +418,21 @@ function renderLatinText(text) {
               }
               return;
             }
+          });
+
+          // hover interactions: when entering any word in the phrase,
+          // highlight the entire phrase and specially mark the hovered word
+          wordSpan.addEventListener('mouseenter', (e) => {
+            const group = wordSpan.dataset.noteGroup;
+            if (!group) return;
+            document.querySelectorAll(`.word.note-available[data-note-group="${group}"]`).forEach(el => el.classList.add('note-hover'));
+            wordSpan.classList.add('note-hover-word');
+          });
+          wordSpan.addEventListener('mouseleave', (e) => {
+            const group = wordSpan.dataset.noteGroup;
+            if (!group) return;
+            document.querySelectorAll(`.word.note-available[data-note-group="${group}"]`).forEach(el => el.classList.remove('note-hover'));
+            wordSpan.classList.remove('note-hover-word');
           });
 
           fragment.appendChild(wordSpan);
@@ -627,6 +692,34 @@ function showNoteInPane(noteObj) {
   document.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => setChapter(+b.dataset.ch));
   });
+
+  // Instructions modal wiring
+  const instrBtn = document.getElementById('instructions-btn');
+  const instrModal = document.getElementById('instructions-modal');
+  if (instrBtn && instrModal) {
+    function openInstr() {
+      instrModal.setAttribute('aria-hidden', 'false');
+      // move focus into modal
+      const firstFocusable = instrModal.querySelector('button, a, [tabindex]');
+      if (firstFocusable) firstFocusable.focus();
+      document.addEventListener('keydown', handleEsc);
+    }
+    function closeInstr() {
+      instrModal.setAttribute('aria-hidden', 'true');
+      instrBtn.focus();
+      document.removeEventListener('keydown', handleEsc);
+    }
+    function handleEsc(e) {
+      if (e.key === 'Escape') closeInstr();
+    }
+
+    instrBtn.addEventListener('click', openInstr);
+    instrModal.querySelectorAll('[data-action="close"]').forEach(el => el.addEventListener('click', closeInstr));
+    // overlay click closes (already wired via data-action close selector)
+    instrModal.addEventListener('click', (e) => {
+      if (e.target === instrModal.querySelector('.modal-overlay')) closeInstr();
+    });
+  }
 
   // attach delegated click handler for vocab lookups
   attachDelegatedLatinClick();
