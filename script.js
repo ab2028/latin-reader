@@ -687,7 +687,7 @@ function showNoteInPane(noteObj) {
 
 
 /* ---------- boot ---------- */
-(async () => {
+async function bootstrapApp() {
   // attach chapter button handlers
   document.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => setChapter(+b.dataset.ch));
@@ -726,4 +726,10 @@ function showNoteInPane(noteObj) {
 
   // load default chapter
   setChapter(currentChapter);
-})();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapApp, { once: true });
+} else {
+  bootstrapApp();
+}
