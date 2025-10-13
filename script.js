@@ -4,11 +4,8 @@ let notesData = {}; // raw notes map from notes.json
 let notesList = []; // processed array of note objects
 let currentChapter = 2;
 let latestLookupToken = 0; // used to discard stale Whitaker responses
-const WHITAKER_ENDPOINTS = [
-  word => `https://latin-words.com/cgi-bin/translate.cgi?latin=${encodeURIComponent(word)}`,
-  word => `https://latin-words.com/cgi-bin/translate.cgi?backup=1&latin=${encodeURIComponent(word)}`,
-  word => `https://archives.nd.edu/cgi-bin/wordz.pl?keyword=${encodeURIComponent(word)}`,
-];
+const WHITAKER_PROXY_URL = 'https://xmxyejzhsershpordgwj.supabase.co/functions/v1/whitaker-proxy';
+const WHITAKER_ENDPOINTS_COUNT = 3;
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -54,13 +51,12 @@ function collectLookupCandidates(rawCandidates) {
 }
 
 function buildWhitakerUrl(word, endpointIndex = 0) {
-  const idx = Math.max(0, Math.min(endpointIndex, WHITAKER_ENDPOINTS.length - 1));
-  const builder = WHITAKER_ENDPOINTS[idx] || WHITAKER_ENDPOINTS[0];
+  const idx = Math.max(0, Math.min(endpointIndex, WHITAKER_ENDPOINTS_COUNT - 1));
   try {
-    return builder(String(word || ''));
+    return `${WHITAKER_PROXY_URL}?word=${encodeURIComponent(String(word || ''))}&endpoint=${idx}`;
   } catch (err) {
     console.warn('Failed to build Whitaker URL', err);
-    return WHITAKER_ENDPOINTS[0](String(word || ''));
+    return `${WHITAKER_PROXY_URL}?word=${encodeURIComponent(String(word || ''))}&endpoint=0`;
   }
 }
 
@@ -133,12 +129,12 @@ async function lookupWhitakersWords(rawCandidates) {
   let lastTried = null;
   let lastEndpointIndex = 0;
   for (const candidate of candidates) {
-    for (let endpointIndex = 0; endpointIndex < WHITAKER_ENDPOINTS.length; endpointIndex++) {
+    for (let endpointIndex = 0; endpointIndex < WHITAKER_ENDPOINTS_COUNT; endpointIndex++) {
       const url = buildWhitakerUrl(candidate, endpointIndex);
       try {
         lastTried = candidate;
         lastEndpointIndex = endpointIndex;
-        const resp = await fetch(url, { mode: 'cors' });
+        const resp = await fetch(url);
         if (requestId !== latestLookupToken) return;
         if (!resp || !resp.ok) {
           throw new Error(`HTTP ${resp ? resp.status : 'network error'}`);
