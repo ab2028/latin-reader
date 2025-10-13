@@ -1,11 +1,10 @@
 // --- small, pragmatic lemmatizer & linker for Latin ---
 
-let vocabData = {};
-let vocabEntries = [];
 let notesData = {}; // raw notes map from notes.json
 let notesList = []; // processed array of note objects
-const MIN_STEM_LEN = 3;
 let currentChapter = 2;
+let latestLookupToken = 0; // used to discard stale Whitaker responses
+const WHITAKER_BASE_URL = 'https://archives.nd.edu/cgi-bin/wordz.pl?keyword=';
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -22,126 +21,130 @@ function stripEnclitic(w) {
   return w;
 }
 
-function stemLatin(w) {
-  let base = stripEnclitic(normalize(w));
-  const nounAdjSuffixes = [
-    "orum","arum","ibus","ium","uum",
-    "ae","am","as","os","um","us","is","e","i","o","u","em","es","a"
-  ];
-  const verbSuffixes = [
-    "ntur","tur","mini","mur",
-    "mus","tis","unt","ent","ant",
-    "ris","re","isti","imus","itis","erunt","ere",
-    "bam","bat","bant","bo","bis","bit",
-    "or","o","s","t","m","nt","it"
-  ];
-  for (const s of nounAdjSuffixes) {
-    if (base.endsWith(s) && base.length - s.length >= MIN_STEM_LEN) {
-      base = base.slice(0, -s.length);
-      break;
-    }
-  }
-  for (const s of verbSuffixes) {
-    if (base.endsWith(s) && base.length - s.length >= MIN_STEM_LEN) {
-      base = base.slice(0, -s.length);
-      break;
-    }
-  }
-  return base;
+/* ---------- Whitaker lookup ---------- */
+function initializeVocabPane() {
+  const vocabList = document.getElementById('vocab-list');
+  if (!vocabList) return;
+  vocabList.innerHTML = `<p class="lookup-status"><em>Click a word in the Latin text to look it up in Whitaker’s Words (internet connection required).</em></p>`;
+  vocabList.setAttribute('aria-live', 'polite');
 }
 
-/* ---------- irregular map ---------- */
-const IRREGULAR_FORMS = new Map([
-  ["est","sum"],["sunt","sum"],["esse","sum"],["erat","sum"],["fuit","sum"],["fuerunt","sum"],["sit","sum"],["sint","sum"],
-  ["tulit","fero"],["latus","fero"],["contulit","confero"],["auxit","augeo"]
-]);
-
-function guessLemmaFromHeuristics(word) {
-  const w = normalize(word);
-  if (IRREGULAR_FORMS.has(w)) return IRREGULAR_FORMS.get(w);
-  if (w.endsWith("i") && w.length > 2) {
-    const root = w.slice(0, -1);
-    const cand1 = root + "us";
-    const cand2 = root + "um";
-    if (vocabData[cand1]) return cand1;
-    if (vocabData[cand2]) return cand2;
+function collectLookupCandidates(rawCandidates) {
+  const candidates = [];
+  const seen = new Set();
+  for (const raw of rawCandidates) {
+    if (!raw) continue;
+    const cleaned = normalize(raw);
+    if (!cleaned) continue;
+    if (!seen.has(cleaned)) {
+      candidates.push(cleaned);
+      seen.add(cleaned);
+    }
+    const stripped = stripEnclitic(cleaned);
+    if (stripped && !seen.has(stripped)) {
+      candidates.push(stripped);
+      seen.add(stripped);
+    }
   }
-  if (w.endsWith("ae") && w.length > 3) {
-    const cand = w.slice(0, -2) + "a";
-    if (vocabData[cand]) return cand;
-  }
-  const targetStem = stemLatin(w);
-  if (targetStem.length < MIN_STEM_LEN) return null;
-
-  let best = null, bestScore = 0;
-  for (const { lemma, stem } of vocabEntries) {
-    let k = 0;
-    while (k < targetStem.length && k < stem.length && targetStem[k] === stem[k]) k++;
-    if (k > bestScore && k >= MIN_STEM_LEN) { bestScore = k; best = lemma; }
-  }
-  return best;
+  return candidates;
 }
 
-/* ---------- load vocab ---------- */
-async function loadVocab() {
-  console.log(`loadVocab: loading chapter ${currentChapter}`);
-  // try chapter-specific vocab in the vocab/ folder first, then fall back
-  // to root-level vocab.json for compatibility
-  const vocabPath = `vocab/vocab-ch${currentChapter}.json`;
-  let resp = await fetch(vocabPath).catch(() => null);
-  if (!resp || !resp.ok) {
-    // fallback to root-level vocab.json
-    resp = await fetch("vocab.json").catch(() => null);
-  }
-  if (!resp || !resp.ok) {
-    vocabData = {};
-    const vocabList = document.getElementById("vocab-list");
-    if (vocabList) vocabList.innerHTML = `<p><em>Vocabulary not available for chapter ${currentChapter}. If you opened the file directly in the browser (file://), fetch() will fail — try running a local server, e.g. <code>python3 -m http.server 8000</code>.</em></p>`;
+function renderLookupError(word, message, linkWord) {
+  const vocabList = document.getElementById('vocab-list');
+  if (!vocabList) return;
+  const target = linkWord || word;
+  const href = `${WHITAKER_BASE_URL}${encodeURIComponent(target)}`;
+  vocabList.innerHTML = `
+    <div class="lookup-status error">
+      <strong>Whitaker’s Words lookup failed</strong> for “${escapeHtml(word)}”.<br>
+      ${escapeHtml(message)}
+      <div class="lookup-actions">
+        <a href="${href}" target="_blank" rel="noopener noreferrer">Open Whitaker’s Words in a new tab</a>
+      </div>
+    </div>
+  `;
+}
+
+function renderLookupResult(originalWord, lookedUpWord, text) {
+  const vocabList = document.getElementById('vocab-list');
+  if (!vocabList) return;
+  vocabList.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'lookup-status success';
+  const sameWord = originalWord === lookedUpWord;
+  header.innerHTML = `
+    <strong>Whitaker’s Words</strong> for “${escapeHtml(originalWord)}”
+    ${sameWord ? '' : `<span class="lookup-note">(searched as “${escapeHtml(lookedUpWord)}”)</span>`}
+  `;
+
+  const pre = document.createElement('pre');
+  pre.className = 'whitaker-output';
+  pre.textContent = text;
+
+  const footer = document.createElement('div');
+  footer.className = 'lookup-actions';
+  const link = document.createElement('a');
+  link.href = `${WHITAKER_BASE_URL}${encodeURIComponent(lookedUpWord)}`;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = 'Open in new tab';
+  footer.appendChild(link);
+
+  vocabList.appendChild(header);
+  vocabList.appendChild(pre);
+  vocabList.appendChild(footer);
+}
+
+async function lookupWhitakersWords(rawCandidates) {
+  const vocabList = document.getElementById('vocab-list');
+  if (!vocabList) return;
+
+  const displayWordRaw = (rawCandidates || []).find(w => w && w.trim());
+  const candidates = collectLookupCandidates(rawCandidates);
+  if (!candidates.length) {
+    const displayWord = displayWordRaw ? displayWordRaw.trim() : '—';
+    renderLookupError(displayWord, 'No valid word selected.', '');
     return;
   }
-  try {
-    vocabData = await resp.json();
-  } catch (err) {
-    console.error('Failed to parse vocab JSON', err);
-    vocabData = {};
-    const vocabList = document.getElementById("vocab-list");
-    if (vocabList) vocabList.innerHTML = `<p><em>Vocabulary could not be parsed for chapter ${currentChapter}.</em></p>`;
-    return;
-  }
-  const vocabList = document.getElementById("vocab-list");
-  vocabList.innerHTML = "";
-  vocabEntries = [];
-  for (const [lemma, gloss] of Object.entries(vocabData)) {
-    const div = document.createElement("div");
-    div.className = "vocab-entry";
-    div.dataset.word = lemma.toLowerCase();
-    // display the value but make everything before the en dash (–) bold
-    // if an en dash is present. Escape HTML to be safe.
-    if (typeof gloss === 'string' && gloss.indexOf(':') !== -1) {
-      const parts = gloss.split(/:/);
-      const left = parts.shift().trim();
-      const right = parts.join(':').trim();
-      // If the left part ends with one or more parenthetical groups, pull
-      // them out so they are not included in the bolded text. Example:
-      // "faciō (v.t.)" -> bold "faciō" and render "(v.t.)" unbolded.
-      const m = left.match(/^(.*?)(\s*(?:\([^)]*\)\s*)+)$/);
-      if (m) {
-        const mainLeft = m[1].trim();
-        const trailingParens = m[2].trim();
-        div.innerHTML = `<b>${renderVocabText(mainLeft)}</b> ${renderVocabText(trailingParens)}: ${renderVocabText(right)}`;
-      } else {
-        div.innerHTML = `<b>${renderVocabText(left)}</b>: ${renderVocabText(right)}`;
+
+  const displayWord = displayWordRaw ? displayWordRaw.trim() : candidates[0];
+  const originalWord = candidates[0];
+  const requestId = ++latestLookupToken;
+
+  vocabList.innerHTML = `<p class="lookup-status"><em>Looking up “${escapeHtml(displayWord)}” in Whitaker’s Words…</em></p>`;
+
+  let lastError = null;
+  let lastTried = null;
+  for (const candidate of candidates) {
+    try {
+      lastTried = candidate;
+      const resp = await fetch(`${WHITAKER_BASE_URL}${encodeURIComponent(candidate)}`, { mode: 'cors' });
+      if (requestId !== latestLookupToken) return;
+      if (!resp || !resp.ok) {
+        throw new Error(`HTTP ${resp ? resp.status : 'network error'}`);
       }
-    } else {
-      div.innerHTML = renderVocabText(gloss);
+      const html = await resp.text();
+      if (requestId !== latestLookupToken) return;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const pre = doc.querySelector('pre');
+      const text = (pre ? pre.textContent : doc.body.textContent || '').replace(/ /g, ' ').trim();
+      if (text) {
+        renderLookupResult(displayWord, candidate, text);
+        return;
+      }
+    } catch (err) {
+      console.warn('Whitaker lookup failed for', candidate, err);
+      lastError = err;
     }
-    vocabList.appendChild(div);
-    vocabEntries.push({ lemma: lemma.toLowerCase(), stem: stemLatin(lemma), el: div });
   }
-  console.log(`loadVocab: loaded ${vocabEntries.length} entries for chapter ${currentChapter}`);
-  if (vocabEntries.length === 0 && vocabList) {
-    vocabList.innerHTML = `<p><em>No vocabulary entries found for chapter ${currentChapter}.</em></p>`;
-  }
+
+  if (requestId !== latestLookupToken) return;
+  const fallbackMessage = lastError
+    ? 'Unable to retrieve a response from Whitaker’s Words. Some browsers block cross-site requests; you can use the link below instead.'
+    : 'The online service did not return any results.';
+  renderLookupError(displayWord, fallbackMessage, lastTried || originalWord);
 }
 
 /* ---------- load notes ---------- */
@@ -266,39 +269,6 @@ function renderRichText(raw) {
   return s;
 }
 
-// Vocab-specific renderer: uses the safe markdown-like renderer then
-// italicizes parenthetical abbreviations (e.g. "(v.t.)") so vocab
-// entries show those abbreviations in italics without affecting notes.
-function renderVocabText(raw) {
-  let s = renderRichText(raw);
-  // scan and wrap parenthetical segments whose inner text ends with a dot
-  let out = '';
-  let i = 0;
-  while (i < s.length) {
-    const open = s.indexOf('(', i);
-    if (open === -1) { out += s.slice(i); break; }
-    out += s.slice(i, open);
-    const close = s.indexOf(')', open + 1);
-    if (close === -1) { out += s.slice(open); break; }
-    const inner = s.slice(open + 1, close);
-    const innerTrim = inner.trim();
-    // skip if inner already contains html tags
-    if (/[<]\/?.+?>/.test(inner)) {
-      out += s.slice(open, close + 1);
-      i = close + 1;
-      continue;
-    }
-    if (innerTrim.endsWith('.')) {
-      out += `<em>(${innerTrim})</em>`;
-    } else {
-      out += s.slice(open, close + 1);
-    }
-    i = close + 1;
-  }
-  return out;
-}
-
-
 /* ---------- main text load ---------- */
 async function loadChapter() {
   const textPath = `texts/atticus-ch${currentChapter}.txt`;
@@ -316,8 +286,6 @@ async function loadChapter() {
         if (latinContainer) {
           latinContainer.innerHTML = `<p><em>Sorry — text for chapter ${currentChapter} is not available.</em></p>`;
         }
-        // still wire up vocab events (they may be empty) and return
-        attachVocabEvents();
         return;
       }
     } else {
@@ -330,21 +298,19 @@ async function loadChapter() {
     // reset scroll to top of reading pane for new chapter
     const latinContainer = document.getElementById("latin-text");
     if (latinContainer) latinContainer.scrollTop = 0;
-    attachVocabEvents();
   } catch (err) {
     console.error('Error loading chapter', err);
     const latinContainer = document.getElementById("latin-text");
     if (latinContainer) latinContainer.innerHTML = `<p><em>Failed to load chapter ${currentChapter}.</em></p>`;
-    attachVocabEvents();
   }
 }
 
 function setChapter(n) {
   currentChapter = n;
   document.querySelectorAll('.chapter-btn').forEach(b => b.classList.toggle('active', +b.dataset.ch === n));
-  // reload vocab, notes, text for the chapter
+  // reload notes and text for the chapter, and reset the vocab pane
   (async () => {
-    await loadVocab();
+    initializeVocabPane();
     await loadNotes();
     await loadChapter();
   })();
@@ -564,63 +530,7 @@ function findNoteMatches(wordEntries) {
 
 function resolveVocabTooltip(cleanWord) {
   if (!cleanWord) return "";
-  if (vocabData[cleanWord]) return vocabData[cleanWord];
-  const lemma = guessLemmaFromHeuristics(cleanWord);
-  if (lemma && vocabData[lemma]) return vocabData[lemma];
-  return "";
-}
-
-/* ---------- vocab interactions ---------- */
-function findVocabEntryForWord(word) {
-  const clean = normalize(word);
-  if (vocabData[clean]) return document.querySelector(`.vocab-entry[data-word="${clean}"]`);
-  const lemma = guessLemmaFromHeuristics(clean);
-  if (lemma && vocabData[lemma]) return document.querySelector(`.vocab-entry[data-word="${lemma}"]`);
-  const targetStem = stemLatin(clean);
-  if (targetStem.length < MIN_STEM_LEN) return null;
-
-  let bestEl = null, bestScore = 0;
-  for (const { stem, el } of vocabEntries) {
-    let k = 0;
-    while (k < targetStem.length && k < stem.length && targetStem[k] === stem[k]) k++;
-    if (k > bestScore && k >= MIN_STEM_LEN) { bestScore = k; bestEl = el; }
-  }
-  return bestEl;
-}
-
-function attachVocabEvents() {
-  const entries = document.querySelectorAll(".vocab-entry");
-  document.querySelectorAll(".word").forEach(span => {
-    span.addEventListener("click", (e) => {
-      if (e.shiftKey) return; // shift is reserved for notes
-      entries.forEach(e => e.classList.remove("highlight"));
-
-      const rawCandidates = [];
-      if (span.dataset.raw) rawCandidates.push(span.dataset.raw);
-      if (span.dataset.raws) {
-        for (const token of span.dataset.raws.split('\t')) {
-          if (token && !rawCandidates.includes(token)) rawCandidates.push(token);
-        }
-      }
-      if (!rawCandidates.length && span.textContent) {
-        span.textContent.split(/\s+/).forEach(tok => {
-          if (tok && !rawCandidates.includes(tok)) rawCandidates.push(tok);
-        });
-      }
-
-      let entry = null;
-      for (const raw of rawCandidates) {
-        entry = findVocabEntryForWord(raw);
-        if (entry) break;
-      }
-
-      if (entry) {
-        entry.scrollIntoView({ behavior: "smooth", block: "center" });
-        entry.classList.add("highlight");
-        setTimeout(() => entry.classList.remove("highlight"), 2000);
-      }
-    });
-  });
+  return `Click to look up “${cleanWord}” in Whitaker’s Words.`;
 }
 
 // Delegated click handler on the main latin text container. This is
@@ -636,29 +546,18 @@ function attachDelegatedLatinClick() {
     if (e.shiftKey) return; // keep shift for notes
     const span = e.target.closest && e.target.closest('.word');
     if (!span || !latin.contains(span)) return;
-    // find vocab entry using dataset.raw or the first token
-    // Build an array of candidate tokens from the clicked span. If the
-    // span stored multiple raws (for multi-word phrases) try them in
-    // order left-to-right, then right-to-left as a fallback.
-    const rawCandidates = span.dataset.raws ? span.dataset.raws.split('\t') : [(span.dataset.raw || (span.textContent || '').split(/\s+/)[0])];
-    let foundEntry = null;
-    for (const c of rawCandidates) {
-      const e = findVocabEntryForWord(c);
-      if (e) { foundEntry = e; break; }
-    }
-    if (!foundEntry) {
-      for (let i = rawCandidates.length - 1; i >= 0; i--) {
-        const e = findVocabEntryForWord(rawCandidates[i]);
-        if (e) { foundEntry = e; break; }
+    const rawCandidates = [];
+    if (span.dataset.raw) rawCandidates.push(span.dataset.raw);
+    if (span.dataset.raws) {
+      for (const token of span.dataset.raws.split('\t')) {
+        if (token) rawCandidates.push(token);
       }
     }
-    if (foundEntry) {
-      // clear previous highlights
-      document.querySelectorAll('.vocab-entry.highlight').forEach(x => x.classList.remove('highlight'));
-      foundEntry.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      foundEntry.classList.add('highlight');
-      setTimeout(() => foundEntry.classList.remove('highlight'), 2000);
+    if (!rawCandidates.length && span.textContent) {
+      const firstToken = (span.textContent || '').split(/\s+/)[0];
+      if (firstToken) rawCandidates.push(firstToken);
     }
+    lookupWhitakersWords(rawCandidates);
   });
   _latinDelegatedAttached = true;
 }
@@ -720,6 +619,9 @@ async function bootstrapApp() {
       if (e.target === instrModal.querySelector('.modal-overlay')) closeInstr();
     });
   }
+
+  // prepare the vocab pane with instructions before any lookups occur
+  initializeVocabPane();
 
   // attach delegated click handler for vocab lookups
   attachDelegatedLatinClick();
