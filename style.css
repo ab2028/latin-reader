@@ -213,86 +213,14 @@ body {
   background: rgba(246,195,36,0.18);
   transition: background 0.22s;
 }
-
-.whitaker-hint,
-.whitaker-status {
-  margin: 0;
-  padding: 0.4rem 0;
-  color: var(--muted);
-}
-
-.whitaker-heading {
+.vocab-entry {
   margin-bottom: 0.6rem;
-}
-.whitaker-heading h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: #3b2e1c;
-}
-.whitaker-heading p {
-  margin: 0.25rem 0 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.whitaker-word {
-  font-weight: 600;
-  color: var(--ink);
-}
-.whitaker-source {
-  font-style: italic;
-}
-
-.whitaker-entry {
-  margin-bottom: 0.6rem;
-  padding: 0.65rem 0.7rem;
+  padding: 0.5rem;
   border-radius: 8px;
-  background: var(--card);
-  border-left: 3px solid var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(120,100,80,0.06);
 }
-.whitaker-entry pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: 'Fira Code', 'Source Code Pro', monospace;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--ink);
-}
-
-.whitaker-raw-hint {
-  margin-top: 0.4rem;
-  color: var(--muted);
-}
-
-.whitaker-error {
-  padding: 0.65rem 0.7rem;
-  border-radius: 8px;
-  background: rgba(255, 245, 220, 0.75);
-  border-left: 3px solid rgba(200, 128, 32, 0.6);
-  box-shadow: inset 0 0 0 1px rgba(200, 128, 32, 0.15);
-  color: var(--muted);
-}
-.whitaker-error p {
-  margin: 0;
-  color: var(--ink);
-}
-.whitaker-error-list {
-  margin: 0.4rem 0;
-  padding-left: 1.1rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.whitaker-help {
-  margin: 0.4rem 0 0 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.whitaker-help code {
-  font-family: 'Fira Code', 'Source Code Pro', monospace;
-  font-size: 0.85em;
-  background: rgba(255,255,255,0.7);
-  padding: 0.1rem 0.3rem;
-  border-radius: 4px;
+.vocab-entry.highlight {
+  background: linear-gradient(90deg,#fff7d6,#fff0b4);
+  transition: background 0.28s;
 }
 
 /* --- notes styles --- */
