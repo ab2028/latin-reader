@@ -4,7 +4,11 @@ let notesData = {}; // raw notes map from notes.json
 let notesList = []; // processed array of note objects
 let currentChapter = 2;
 let latestLookupToken = 0; // used to discard stale Whitaker responses
-const WHITAKER_BASE_URL = 'https://archives.nd.edu/cgi-bin/wordz.pl?keyword=';
+const WHITAKER_ENDPOINTS = [
+  word => `https://latin-words.com/cgi-bin/translate.cgi?latin=${encodeURIComponent(word)}`,
+  word => `https://latin-words.com/cgi-bin/translate.cgi?backup=1&latin=${encodeURIComponent(word)}`,
+  word => `https://archives.nd.edu/cgi-bin/wordz.pl?keyword=${encodeURIComponent(word)}`,
+];
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -25,7 +29,7 @@ function stripEnclitic(w) {
 function initializeVocabPane() {
   const vocabList = document.getElementById('vocab-list');
   if (!vocabList) return;
-  vocabList.innerHTML = `<p class="lookup-status"><em>Click a word in the Latin text to look it up in Whitaker’s Words (internet connection required).</em></p>`;
+  vocabList.innerHTML = `<p class="lookup-status"><em>Click a word in the Latin text to look it up in Whitaker’s Words via latin-words.com (internet connection required).</em></p>`;
   vocabList.setAttribute('aria-live', 'polite');
 }
 
@@ -49,11 +53,22 @@ function collectLookupCandidates(rawCandidates) {
   return candidates;
 }
 
-function renderLookupError(word, message, linkWord) {
+function buildWhitakerUrl(word, endpointIndex = 0) {
+  const idx = Math.max(0, Math.min(endpointIndex, WHITAKER_ENDPOINTS.length - 1));
+  const builder = WHITAKER_ENDPOINTS[idx] || WHITAKER_ENDPOINTS[0];
+  try {
+    return builder(String(word || ''));
+  } catch (err) {
+    console.warn('Failed to build Whitaker URL', err);
+    return WHITAKER_ENDPOINTS[0](String(word || ''));
+  }
+}
+
+function renderLookupError(word, message, linkWord, linkUrl) {
   const vocabList = document.getElementById('vocab-list');
   if (!vocabList) return;
   const target = linkWord || word;
-  const href = `${WHITAKER_BASE_URL}${encodeURIComponent(target)}`;
+  const href = linkUrl || buildWhitakerUrl(target, 0);
   vocabList.innerHTML = `
     <div class="lookup-status error">
       <strong>Whitaker’s Words lookup failed</strong> for “${escapeHtml(word)}”.<br>
@@ -65,7 +80,7 @@ function renderLookupError(word, message, linkWord) {
   `;
 }
 
-function renderLookupResult(originalWord, lookedUpWord, text) {
+function renderLookupResult(originalWord, lookedUpWord, text, sourceUrl) {
   const vocabList = document.getElementById('vocab-list');
   if (!vocabList) return;
   vocabList.innerHTML = '';
@@ -85,7 +100,7 @@ function renderLookupResult(originalWord, lookedUpWord, text) {
   const footer = document.createElement('div');
   footer.className = 'lookup-actions';
   const link = document.createElement('a');
-  link.href = `${WHITAKER_BASE_URL}${encodeURIComponent(lookedUpWord)}`;
+  link.href = sourceUrl || buildWhitakerUrl(lookedUpWord, 0);
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   link.textContent = 'Open in new tab';
@@ -116,27 +131,31 @@ async function lookupWhitakersWords(rawCandidates) {
 
   let lastError = null;
   let lastTried = null;
+  let lastEndpointIndex = 0;
   for (const candidate of candidates) {
-    try {
-      lastTried = candidate;
-      const resp = await fetch(`${WHITAKER_BASE_URL}${encodeURIComponent(candidate)}`, { mode: 'cors' });
-      if (requestId !== latestLookupToken) return;
-      if (!resp || !resp.ok) {
-        throw new Error(`HTTP ${resp ? resp.status : 'network error'}`);
+    for (let endpointIndex = 0; endpointIndex < WHITAKER_ENDPOINTS.length; endpointIndex++) {
+      const url = buildWhitakerUrl(candidate, endpointIndex);
+      try {
+        lastTried = candidate;
+        lastEndpointIndex = endpointIndex;
+        const resp = await fetch(url, { mode: 'cors' });
+        if (requestId !== latestLookupToken) return;
+        if (!resp || !resp.ok) {
+          throw new Error(`HTTP ${resp ? resp.status : 'network error'}`);
+        }
+        const html = await resp.text();
+        if (requestId !== latestLookupToken) return;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const text = extractWhitakerText(doc);
+        if (text) {
+          renderLookupResult(displayWord, candidate, text, url);
+          return;
+        }
+      } catch (err) {
+        console.warn('Whitaker lookup failed for', candidate, 'via', url, err);
+        lastError = err;
       }
-      const html = await resp.text();
-      if (requestId !== latestLookupToken) return;
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      const pre = doc.querySelector('pre');
-      const text = (pre ? pre.textContent : doc.body.textContent || '').replace(/ /g, ' ').trim();
-      if (text) {
-        renderLookupResult(displayWord, candidate, text);
-        return;
-      }
-    } catch (err) {
-      console.warn('Whitaker lookup failed for', candidate, err);
-      lastError = err;
     }
   }
 
@@ -144,7 +163,38 @@ async function lookupWhitakersWords(rawCandidates) {
   const fallbackMessage = lastError
     ? 'Unable to retrieve a response from Whitaker’s Words. Some browsers block cross-site requests; you can use the link below instead.'
     : 'The online service did not return any results.';
-  renderLookupError(displayWord, fallbackMessage, lastTried || originalWord);
+  const linkWord = lastTried || originalWord;
+  renderLookupError(displayWord, fallbackMessage, linkWord, buildWhitakerUrl(linkWord, lastEndpointIndex));
+}
+
+function extractWhitakerText(doc) {
+  if (!doc) return '';
+  const normalizeWhitakerText = raw => {
+    if (!raw) return '';
+    return raw
+      .replace(/\u00a0/g, ' ')
+      .replace(/\r/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  const pre = doc.querySelector('pre');
+  if (pre && pre.textContent && pre.textContent.trim()) {
+    return normalizeWhitakerText(pre.textContent);
+  }
+
+  const textarea = doc.querySelector('textarea');
+  if (textarea && textarea.textContent && textarea.textContent.trim()) {
+    return normalizeWhitakerText(textarea.textContent);
+  }
+
+  const main = doc.querySelector('#content, main, article');
+  if (main && main.textContent && main.textContent.trim()) {
+    return normalizeWhitakerText(main.textContent);
+  }
+
+  const bodyText = doc.body && doc.body.textContent ? doc.body.textContent : '';
+  return normalizeWhitakerText(bodyText);
 }
 
 /* ---------- load notes ---------- */
