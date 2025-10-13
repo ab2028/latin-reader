@@ -199,6 +199,11 @@ body {
   overflow-y: auto;
   padding: 1rem 0.6rem;
 }
+#vocab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
 
 /* --- text/vocab interactions --- */
 .word {
@@ -213,14 +218,57 @@ body {
   background: rgba(246,195,36,0.18);
   transition: background 0.22s;
 }
-.vocab-entry {
-  margin-bottom: 0.6rem;
-  padding: 0.5rem;
+.lookup-status {
+  background: var(--card);
+  border-left: 3px solid var(--accent);
   border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  color: var(--muted);
+  box-shadow: 0 2px 6px rgba(60,40,20,0.04);
 }
-.vocab-entry.highlight {
-  background: linear-gradient(90deg,#fff7d6,#fff0b4);
-  transition: background 0.28s;
+.lookup-status strong {
+  display: block;
+  color: var(--ink);
+  margin-bottom: 0.15rem;
+}
+.lookup-status.success {
+  border-left-color: var(--accent-strong);
+  color: var(--ink);
+}
+.lookup-status.error {
+  background: linear-gradient(90deg,#fff2ef,#ffe9e4);
+  border-left-color: #d8614f;
+  color: #7a2f21;
+}
+.lookup-note {
+  font-size: 0.85em;
+  color: var(--muted);
+  margin-left: 0.4rem;
+}
+.whitaker-output {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  margin-top: 0.4rem;
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: 'Source Code Pro', 'Fira Code', monospace;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  box-shadow: inset 0 0 0 1px rgba(80,60,40,0.08);
+}
+.lookup-actions {
+  margin-top: 0.5rem;
+}
+.lookup-actions a {
+  color: #b35416;
+  text-decoration: none;
+  font-weight: 600;
+}
+.lookup-actions a:hover {
+  text-decoration: underline;
 }
 
 /* --- notes styles --- */
