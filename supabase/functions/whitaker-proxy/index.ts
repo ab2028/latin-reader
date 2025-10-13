@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 const WHITAKER_ENDPOINTS = [
-  (word: string) => `https://latin-words.com/cgi-bin/translate.cgi?latin=${encodeURIComponent(word)}`,
-  (word: string) => `https://latin-words.com/cgi-bin/translate.cgi?backup=1&latin=${encodeURIComponent(word)}`,
+  (word: string) => `https://latin-words.com/cgi-bin/translate.cgi?query=${encodeURIComponent(word)}`,
+  (word: string) => `https://latin-words.com/cgi-bin/translate.cgi?backup=1&query=${encodeURIComponent(word)}`,
   (word: string) => `https://archives.nd.edu/cgi-bin/wordz.pl?keyword=${encodeURIComponent(word)}`,
 ];
 
@@ -38,14 +38,15 @@ Deno.serve(async (req: Request) => {
     const response = await fetch(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; WhitakerProxy/1.0)",
+        "Accept": "application/json, text/plain, */*",
       },
     });
 
     if (!response.ok) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: `Whitaker's Words service returned status ${response.status}`,
-          status: response.status 
+          status: response.status
         }),
         {
           status: response.status,
@@ -54,8 +55,30 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const html = await response.text();
+    const contentType = response.headers.get("content-type") || "";
 
+    if (contentType.includes("application/json")) {
+      const json = await response.json();
+      if (json.status === "ok") {
+        return new Response(json.message, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      } else {
+        return new Response(
+          JSON.stringify({ error: json.message || "Unknown error from service" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    const html = await response.text();
     return new Response(html, {
       status: 200,
       headers: {
