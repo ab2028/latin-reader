@@ -36,11 +36,11 @@ body {
   top: 1rem;
   transform: translateX(-50%);
   z-index: 50; /* above header */
-  margin-left: 200px; /* nudge a bit to the right */
+  margin-left: 185px; /* nudge a bit to the right */
 }
 #instructions-btn {
-  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,250,240,0.95));
-  border: 1px solid rgba(120,100,80,0.08);
+  background: linear-gradient(180deg, rgba(245, 120, 120, 0.95), rgba(247, 192, 84, 0.95));
+  border: 0px solid rgba(120,100,80,0.08);
   padding: 0.45rem 0.85rem;
   border-radius: 999px;
   font-weight: 700;
