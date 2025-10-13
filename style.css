@@ -15,6 +15,71 @@ body {
   background: linear-gradient(180deg, var(--bg) 0%, #fbf7f0 100%);
 }
 
+body.high-contrast {
+  --bg: #080808;
+  --card: #101010;
+  --muted: #d4d4d4;
+  --accent: #ffb400;
+  --accent-strong: #ffd75a;
+  --ink: #fdfdfd;
+
+  background: #050505;
+  color: var(--ink);
+}
+
+.contrast-controls {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(251,247,240,0.92));
+  border: 1px solid rgba(120,100,80,0.18);
+  box-shadow: 0 8px 24px rgba(40,25,10,0.08);
+  backdrop-filter: blur(6px);
+  z-index: 60;
+}
+
+body.high-contrast .contrast-controls {
+  background: linear-gradient(180deg, rgba(30,30,30,0.94), rgba(18,18,18,0.94));
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.65);
+}
+
+.contrast-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.contrast-btn:hover {
+  color: var(--ink);
+}
+
+.contrast-btn:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.contrast-btn.active {
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: #3a2d13;
+  box-shadow: 0 4px 14px rgba(246,195,36,0.22);
+  transform: translateY(-1px);
+}
+
+body.high-contrast .contrast-btn.active {
+  color: #1c1400;
+  box-shadow: 0 4px 14px rgba(255,210,0,0.45);
+}
+
 #container {
   display: flex;
   width: 100%;
@@ -50,6 +115,16 @@ body {
 }
 #instructions-btn:hover { color: var(--ink); transform: translateY(-2px); }
 
+body.high-contrast #instructions-btn {
+  background: linear-gradient(180deg, rgba(255,196,0,0.94), rgba(255,138,0,0.94));
+  color: #1b1400;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.65);
+}
+
+body.high-contrast #instructions-btn:hover {
+  color: #000;
+}
+
 /* Modal (instructions) */
 .modal { display: none; }
 .modal[aria-hidden="false"] { display: block; }
@@ -72,14 +147,32 @@ body {
   box-shadow: 0 20px 60px rgba(20,12,6,0.28);
   z-index: 110;
 }
+.modal-body { margin-top: 0.6rem; color: var(--ink); }
 .modal-header { display:flex; align-items:center; justify-content:space-between; gap:0.6rem; }
 .modal-header h3 { margin: 0; }
 .modal-close { background: transparent; border: 0; font-size: 1.05rem; cursor: pointer; color: var(--muted); }
-.modal-body { margin-top: 0.6rem; color: var(--ink); }
 .modal-body ul { margin: 0.35rem 0 0.6rem 1.1rem; }
 .modal-intro { margin: 0 0 0.6rem 0; font-weight: 600; }
 .modal-dismiss { margin-top: 0.75rem; color: var(--muted); }
 .modal-dismiss kbd { display: inline-block; padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); font-family: "Fira Code", "Source Code Pro", monospace; font-size: 0.8em; background: rgba(255,255,255,0.7); }
+
+body.high-contrast .modal-overlay {
+  background: rgba(0,0,0,0.7);
+}
+
+body.high-contrast .modal-content {
+  background: #111;
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+}
+
+body.high-contrast .modal-dismiss {
+  color: var(--muted);
+}
+
+body.high-contrast .modal-close {
+  color: var(--muted);
+}
 
 
 /* nice pill panel for chapters */
@@ -92,6 +185,12 @@ body {
   box-shadow: 0 6px 20px rgba(60, 40, 20, 0.06);
   border-radius: 12px;
   backdrop-filter: blur(2px);
+}
+
+body.high-contrast #chapters {
+  background: linear-gradient(180deg, rgba(34,34,34,0.95), rgba(24,24,24,0.95));
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.65);
 }
 
 .chapter-btn { font-size: 0.9rem; }
@@ -116,6 +215,19 @@ body {
   box-shadow: 0 6px 18px rgba(246,195,36,0.16);
 }
 
+body.high-contrast .chapter-btn {
+  color: var(--muted);
+}
+
+body.high-contrast .chapter-btn:hover {
+  color: var(--ink);
+}
+
+body.high-contrast .chapter-btn.active {
+  color: #1a1400;
+  box-shadow: 0 6px 20px rgba(255,210,0,0.35);
+}
+
 /* toolbar and debug compare styles removed */
 
 /* --- main Latin text --- */
@@ -133,6 +245,11 @@ body {
   box-shadow: 0 10px 30px rgba(40,25,10,0.06);
 }
 
+body.high-contrast #latin-text {
+  background: linear-gradient(180deg, rgba(20,20,20,0.92), rgba(16,16,16,0.96));
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 14px 36px rgba(0,0,0,0.6);
+}
+
 /* --- right pane split vertically --- */
 #right-pane {
   flex: 1;
@@ -143,12 +260,21 @@ body {
   padding: 1rem 0.8rem;
 }
 
+body.high-contrast #right-pane {
+  background: linear-gradient(180deg,#111,#0b0b0b);
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
 /* top half = notes */
 #notes {
   flex: 1;
   overflow-y: auto;
   border-bottom: 1px solid rgba(120,100,80,0.06);
   padding: 1rem 0.6rem;
+}
+
+body.high-contrast #notes {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 /* a non-scrolling separator that visually divides notes and vocab */
@@ -167,6 +293,10 @@ body {
   background: linear-gradient(90deg, rgba(20,16,12,0.02), rgba(20,16,12,0.06), rgba(20,16,12,0.02));
   border-radius: 1px;
 }
+
+body.high-contrast .notes-vocab-sep::before {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.4), rgba(255,255,255,0.05));
+}
 .notes-vocab-sep::after {
   content: "";
   position: absolute;
@@ -178,6 +308,10 @@ body {
   background: var(--accent-strong);
   border-radius: 50%;
   box-shadow: 0 2px 6px rgba(20,16,12,0.08);
+}
+
+body.high-contrast .notes-vocab-sep::after {
+  box-shadow: 0 2px 10px rgba(255,210,0,0.45);
 }
 
 /* render notes like vocab entries: persistent list */
@@ -192,6 +326,17 @@ body {
 .note-entry b { display: block; margin-bottom: 0.25rem; color: var(--ink); }
 .note-text { white-space: pre-wrap; color: var(--ink); }
 .note-entry.highlight { background: linear-gradient(90deg,#fff7d6,#fff0b4); }
+
+body.high-contrast .note-entry {
+  background: #171717;
+  border-left-color: var(--accent-strong);
+  color: var(--muted);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+body.high-contrast .note-entry b {
+  color: var(--ink);
+}
 
 /* bottom half = vocab */
 #vocab {
@@ -245,6 +390,27 @@ body {
   color: var(--muted);
   margin-left: 0.4rem;
 }
+
+body.high-contrast .lookup-status {
+  background: #171717;
+  border-left-color: var(--accent);
+  color: var(--ink);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+body.high-contrast .lookup-status.success {
+  border-left-color: var(--accent-strong);
+}
+
+body.high-contrast .lookup-status.error {
+  background: #2c1612;
+  border-left-color: #ff8c73;
+  color: #ffdcd3;
+}
+
+body.high-contrast .lookup-note {
+  color: var(--muted);
+}
 .whitaker-output {
   background: var(--card);
   border-radius: 10px;
@@ -259,6 +425,12 @@ body {
   white-space: pre-wrap;
   box-shadow: inset 0 0 0 1px rgba(80,60,40,0.08);
 }
+
+body.high-contrast .whitaker-output {
+  background: #111;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
 .lookup-actions {
   margin-top: 0.5rem;
 }
@@ -269,6 +441,10 @@ body {
 }
 .lookup-actions a:hover {
   text-decoration: underline;
+}
+
+body.high-contrast .lookup-actions a {
+  color: #ffb347;
 }
 
 /* --- notes styles --- */
@@ -283,6 +459,11 @@ body {
   color: #6a5b45;
   display: block;
   margin-top: 0.2rem;
+}
+
+body.high-contrast .note {
+  background: rgba(255,210,0,0.12);
+  border-left-color: var(--accent-strong);
 }
 
 .word.note-available:hover {
@@ -316,6 +497,22 @@ body {
   transform: translateY(-1px) scale(1.01);
 }
 
+body.high-contrast .word:hover {
+  background: rgba(255, 210, 0, 0.35);
+}
+
+body.high-contrast .word.clicked {
+  background: rgba(255, 210, 0, 0.28);
+}
+
+body.high-contrast .word.note-available::before {
+  background: rgba(255,210,0,0.32);
+}
+
+body.high-contrast .word.note-available:hover::before {
+  background: rgba(255,210,0,0.45);
+}
+
 /* When hovering any word in a note phrase, darken the entire phrase */
 .word.note-available.note-hover::before {
   background: rgba(255,216,120,0.98);
@@ -325,6 +522,15 @@ body {
 .word.note-available.note-hover-word::before {
   background: rgba(246,195,36,0.98);
   box-shadow: 0 2px 8px rgba(246,195,36,0.12);
+}
+
+body.high-contrast .word.note-available.note-hover::before {
+  background: rgba(255,220,0,0.6);
+}
+
+body.high-contrast .word.note-available.note-hover-word::before {
+  background: rgba(255,234,86,0.85);
+  box-shadow: 0 2px 12px rgba(255, 200, 0, 0.45);
 }
 
 .note.flash {
@@ -337,6 +543,11 @@ body {
   color: #3b2e1c;
   letter-spacing: 0.2px;
   margin: 0 0 0.6rem 0;
+}
+
+body.high-contrast #right-pane h2,
+body.high-contrast #latin-text h1 {
+  color: var(--ink);
 }
 
 /* small responsive tweaks */

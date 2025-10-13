@@ -6,6 +6,11 @@ let currentChapter = 2;
 let latestLookupToken = 0; // used to discard stale Whitaker responses
 const WHITAKER_PROXY_URL = 'https://xmxyejzhsershpordgwj.supabase.co/functions/v1/whitaker-proxy';
 const WHITAKER_ENDPOINTS_COUNT = 3;
+const THEME_STORAGE_KEY = 'latin-reader-theme';
+const THEME_DEFAULT = 'default';
+const THEME_HIGH = 'high';
+let themeStorageWriteWarningShown = false;
+let themeStorageReadWarningShown = false;
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -20,6 +25,95 @@ function stripEnclitic(w) {
   if (w.endsWith("ve") && w.length > 3) return w.slice(0, -2);
   if (w.endsWith("ne") && w.length > 3) return w.slice(0, -2);
   return w;
+}
+
+function applyTheme(theme, options = {}) {
+  const body = document.body;
+  if (!body) return THEME_DEFAULT;
+  const normalized = theme === THEME_HIGH ? THEME_HIGH : THEME_DEFAULT;
+  if (normalized === THEME_HIGH) {
+    body.classList.add('high-contrast');
+  } else {
+    body.classList.remove('high-contrast');
+  }
+
+  document.querySelectorAll('.contrast-btn').forEach(btn => {
+    const isActive = btn.dataset.theme === normalized;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch (err) {
+      if (!themeStorageWriteWarningShown) {
+        console.warn('Unable to persist theme preference', err);
+        themeStorageWriteWarningShown = true;
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function resolvePreferredTheme() {
+  let stored = null;
+  try {
+    stored = localStorage.getItem(THEME_STORAGE_KEY);
+  } catch (err) {
+    if (!themeStorageReadWarningShown) {
+      console.warn('Unable to read stored theme preference', err);
+      themeStorageReadWarningShown = true;
+    }
+  }
+
+  if (stored === THEME_HIGH || stored === THEME_DEFAULT) {
+    return { theme: stored, fromStorage: true };
+  }
+
+  const prefersHigh = window.matchMedia && window.matchMedia('(prefers-contrast: more)').matches;
+  return { theme: prefersHigh ? THEME_HIGH : THEME_DEFAULT, fromStorage: false };
+}
+
+function initializeThemeControls() {
+  const buttons = document.querySelectorAll('.contrast-btn');
+  const { theme: preferredTheme, fromStorage } = resolvePreferredTheme();
+  const initialTheme = applyTheme(preferredTheme, { persist: false });
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyTheme(btn.dataset.theme || THEME_DEFAULT);
+    });
+  });
+
+  if (!fromStorage && window.matchMedia) {
+    const media = window.matchMedia('(prefers-contrast: more)');
+    const handleChange = (event) => {
+      const stored = (() => {
+        try {
+          return localStorage.getItem(THEME_STORAGE_KEY);
+        } catch (err) {
+          if (!themeStorageReadWarningShown) {
+            console.warn('Unable to read stored theme preference', err);
+            themeStorageReadWarningShown = true;
+          }
+          return null;
+        }
+      })();
+      if (stored === THEME_HIGH || stored === THEME_DEFAULT) {
+        return;
+      }
+      applyTheme(event.matches ? THEME_HIGH : THEME_DEFAULT, { persist: false });
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleChange);
+    } else if (typeof media.addListener === 'function') {
+      media.addListener(handleChange);
+    }
+  }
+
+  return initialTheme;
 }
 
 /* ---------- Whitaker lookup ---------- */
@@ -637,6 +731,9 @@ async function bootstrapApp() {
   document.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => setChapter(+b.dataset.ch));
   });
+
+  // theme toggles
+  initializeThemeControls();
 
   // Instructions modal wiring
   const instrBtn = document.getElementById('instructions-btn');
