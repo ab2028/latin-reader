@@ -11,6 +11,15 @@ const THEME_DEFAULT = 'default';
 const THEME_HIGH = 'high';
 let themeStorageWriteWarningShown = false;
 let themeStorageReadWarningShown = false;
+const CREATOR_MODE_STORAGE_KEY = 'latin-reader-creator-mode';
+const CREATOR_LIST_STORAGE_KEY = 'latin-reader-creator-list';
+const CREATOR_NOTES_STORAGE_KEY = 'latin-reader-creator-notes';
+let creatorModeEnabled = false;
+let creatorModeActivePanel = 'vocab';
+let creatorListItems = [];
+let creatorNoteItems = [];
+let creatorModeStorageWriteWarningShown = false;
+let creatorModeStorageReadWarningShown = false;
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -115,6 +124,273 @@ function initializeThemeControls() {
 
   return initialTheme;
 }
+
+/* ---------- creator mode ---------- */
+function readCreatorModeFlag() {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    const stored = localStorage.getItem(CREATOR_MODE_STORAGE_KEY);
+    return stored === 'true';
+  } catch (err) {
+    if (!creatorModeStorageReadWarningShown) {
+      console.warn('Unable to read creator mode preference', err);
+      creatorModeStorageReadWarningShown = true;
+    }
+    return false;
+  }
+}
+
+function writeCreatorModeFlag(enabled) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(CREATOR_MODE_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch (err) {
+    if (!creatorModeStorageWriteWarningShown) {
+      console.warn('Unable to persist creator mode preference', err);
+      creatorModeStorageWriteWarningShown = true;
+    }
+  }
+}
+
+function readCreatorCollectionFromStorage(key) {
+  if (typeof localStorage === 'undefined') return [];
+  let raw = null;
+  try {
+    raw = localStorage.getItem(key);
+  } catch (err) {
+    if (!creatorModeStorageReadWarningShown) {
+      console.warn('Unable to read creator mode collection', err);
+      creatorModeStorageReadWarningShown = true;
+    }
+    return [];
+  }
+  if (!raw) return [];
+  return parseCreatorCollection(raw);
+}
+
+function parseCreatorCollection(rawValue) {
+  if (!rawValue) return [];
+  let parsed = [];
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch (err) {
+    console.warn('Failed to parse creator mode collection', err);
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const items = [];
+  for (const entry of parsed) {
+    const normalized = normalizeCreatorItem(entry);
+    if (normalized) items.push(normalized);
+  }
+  return items;
+}
+
+function normalizeCreatorItem(entry) {
+  if (entry == null) return null;
+  if (typeof entry === 'string') {
+    const text = entry.trim();
+    if (!text) return null;
+    const tokens = text.split(/\s+/).map(normalize).filter(Boolean);
+    if (!tokens.length) return null;
+    return { raw: text, tokens, note: '' };
+  }
+  if (typeof entry === 'object') {
+    let text = '';
+    if (typeof entry.text === 'string' && entry.text.trim()) {
+      text = entry.text.trim();
+    } else if (typeof entry.phrase === 'string' && entry.phrase.trim()) {
+      text = entry.phrase.trim();
+    }
+
+    let tokens = [];
+    if (Array.isArray(entry.tokens) && entry.tokens.length) {
+      tokens = entry.tokens
+        .map(token => normalize(typeof token === 'string' ? token : String(token || '')))
+        .filter(Boolean);
+    }
+    if (!tokens.length && text) {
+      tokens = text.split(/\s+/).map(normalize).filter(Boolean);
+    }
+    if (!tokens.length) return null;
+
+    if (!text) {
+      text = tokens.join(' ');
+    }
+
+    const note = typeof entry.note === 'string'
+      ? entry.note
+      : (typeof entry.annotation === 'string' ? entry.annotation : '');
+
+    return { raw: text, tokens, note };
+  }
+  return null;
+}
+
+function loadCreatorCollections() {
+  creatorListItems = readCreatorCollectionFromStorage(CREATOR_LIST_STORAGE_KEY);
+  creatorNoteItems = readCreatorCollectionFromStorage(CREATOR_NOTES_STORAGE_KEY);
+}
+
+function renderCreatorCollections() {
+  const listContainer = document.getElementById('creator-list-content');
+  if (listContainer) {
+    if (!creatorListItems.length) {
+      listContainer.innerHTML = '<p class="creator-empty"><em>Your List is empty.</em></p>';
+    } else {
+      const ul = document.createElement('ul');
+      ul.className = 'creator-items';
+      creatorListItems.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'creator-item creator-item--list';
+        li.innerHTML = `<div class="creator-item-term">${escapeHtml(item.raw)}</div>`;
+        if (item.note) {
+          li.innerHTML += `<div class="creator-item-note">${escapeHtml(item.note)}</div>`;
+        }
+        ul.appendChild(li);
+      });
+      listContainer.innerHTML = '';
+      listContainer.appendChild(ul);
+    }
+  }
+
+  const notesContainer = document.getElementById('creator-notes-content');
+  if (notesContainer) {
+    if (!creatorNoteItems.length) {
+      notesContainer.innerHTML = '<p class="creator-empty"><em>Your Notes are empty.</em></p>';
+    } else {
+      const ul = document.createElement('ul');
+      ul.className = 'creator-items';
+      creatorNoteItems.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'creator-item creator-item--notes';
+        li.innerHTML = `<div class="creator-item-term">${escapeHtml(item.raw)}</div>`;
+        if (item.note) {
+          li.innerHTML += `<div class="creator-item-note">${escapeHtml(item.note)}</div>`;
+        }
+        ul.appendChild(li);
+      });
+      notesContainer.innerHTML = '';
+      notesContainer.appendChild(ul);
+    }
+  }
+}
+
+function setupCreatorPanelToggle() {
+  const container = document.getElementById('creator-panel-toggle');
+  if (!container) return;
+  const buttons = container.querySelectorAll('.creator-toggle-btn[data-panel]');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel = btn.dataset.panel;
+      if (!panel) return;
+      if (!creatorModeEnabled && panel !== 'vocab') {
+        return;
+      }
+      creatorModeActivePanel = panel;
+      updateCreatorPanelVisibility();
+    });
+  });
+}
+
+function applyCreatorModeClass(enabled) {
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle('creator-mode', !!enabled);
+}
+
+function updateCreatorPanelVisibility() {
+  const activePanel = creatorModeEnabled ? creatorModeActivePanel : 'vocab';
+  document.querySelectorAll('.creator-panel').forEach(panel => {
+    const panelName = panel.dataset.panel || 'vocab';
+    const shouldShow = creatorModeEnabled ? panelName === activePanel : panelName === 'vocab';
+    panel.classList.toggle('is-active', shouldShow);
+    panel.setAttribute('aria-hidden', shouldShow ? 'false' : 'true');
+  });
+
+  document.querySelectorAll('#creator-panel-toggle .creator-toggle-btn[data-panel]').forEach(btn => {
+    const panel = btn.dataset.panel;
+    const isActive = creatorModeEnabled ? panel === creatorModeActivePanel : panel === 'vocab';
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    btn.setAttribute('tabindex', isActive ? '0' : '-1');
+  });
+}
+
+function setCreatorModeState(enabled, options = {}) {
+  creatorModeEnabled = !!enabled;
+  applyCreatorModeClass(creatorModeEnabled);
+  if (options.persist !== false) {
+    writeCreatorModeFlag(creatorModeEnabled);
+  }
+  if (!creatorModeEnabled) {
+    creatorModeActivePanel = 'vocab';
+  }
+  updateCreatorPanelVisibility();
+}
+
+function initializeCreatorMode() {
+  setupCreatorPanelToggle();
+  loadCreatorCollections();
+  renderCreatorCollections();
+  const stored = readCreatorModeFlag();
+  setCreatorModeState(stored, { persist: false });
+}
+
+function findCreatorHighlightIndices(wordEntries, items) {
+  const indices = new Set();
+  if (!items || !items.length) return indices;
+  for (const item of items) {
+    if (!item || !Array.isArray(item.tokens) || !item.tokens.length) continue;
+    const tokens = item.tokens;
+    const len = tokens.length;
+    if (!len) continue;
+    for (let i = 0; i <= wordEntries.length - len; i++) {
+      let matched = true;
+      for (let j = 0; j < len; j++) {
+        if (wordEntries[i + j].clean !== tokens[j]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) {
+        for (let j = 0; j < len; j++) {
+          indices.add(i + j);
+        }
+      }
+    }
+  }
+  return indices;
+}
+
+function applyCreatorHighlightClasses(wordSpan, wordIndex, listSet, noteSet) {
+  if (!creatorModeEnabled || !wordSpan) return;
+  if (noteSet && noteSet.has(wordIndex)) {
+    wordSpan.classList.add('creator-note-highlight');
+  } else if (listSet && listSet.has(wordIndex)) {
+    wordSpan.classList.add('creator-list-highlight');
+  }
+}
+
+function handleCreatorModeShortcut(event) {
+  const key = (event.key || '').toLowerCase();
+  const isCombo = event.ctrlKey && event.altKey && event.shiftKey;
+  if (!isCombo) return;
+  if (key !== 'l' && event.code !== 'KeyL') return;
+  event.preventDefault();
+  const current = readCreatorModeFlag();
+  const next = !current;
+  writeCreatorModeFlag(next);
+  const message = next ? 'Creator Mode activated.' : 'Creator Mode deactivated.';
+  try {
+    alert(message);
+  } catch (err) {
+    console.warn('Creator Mode status:', message);
+  }
+  window.location.reload();
+}
+
+document.addEventListener('keydown', handleCreatorModeShortcut);
 
 /* ---------- Whitaker lookup ---------- */
 function initializeVocabPane() {
@@ -462,6 +738,12 @@ function renderLatinText(text) {
 
   const { tokens, wordEntries } = tokenizeText(text);
   const noteMatches = findNoteMatches(wordEntries);
+  const creatorListHighlights = creatorModeEnabled
+    ? findCreatorHighlightIndices(wordEntries, creatorListItems)
+    : new Set();
+  const creatorNoteHighlights = creatorModeEnabled
+    ? findCreatorHighlightIndices(wordEntries, creatorNoteItems)
+    : new Set();
 
   const fragment = document.createDocumentFragment();
   let tokenIndex = 0;
@@ -541,6 +823,8 @@ function renderLatinText(text) {
             wordSpan.classList.remove('note-hover-word');
           });
 
+          const currentWordIndex = wordIndex + wordsCovered;
+          applyCreatorHighlightClasses(wordSpan, currentWordIndex, creatorListHighlights, creatorNoteHighlights);
           fragment.appendChild(wordSpan);
           wordsCovered++;
         } else {
@@ -562,6 +846,7 @@ function renderLatinText(text) {
     const tooltip = resolveVocabTooltip(token.clean);
     if (tooltip) span.title = tooltip;
 
+    applyCreatorHighlightClasses(span, wordIndex, creatorListHighlights, creatorNoteHighlights);
     fragment.appendChild(span);
     tokenIndex++;
     wordIndex++;
@@ -734,6 +1019,9 @@ async function bootstrapApp() {
 
   // theme toggles
   initializeThemeControls();
+
+  // creator mode setup
+  initializeCreatorMode();
 
   // Instructions modal wiring
   const instrBtn = document.getElementById('instructions-btn');
