@@ -42,8 +42,23 @@
       <div class="notes-vocab-sep" aria-hidden="true"></div>
 
       <section id="vocab">
-        <h2>Vocabulary</h2>
-        <div id="vocab-list"></div>
+        <div class="vocab-header">
+          <h2>Vocabulary</h2>
+          <div id="creator-panel-toggle" class="creator-only" role="tablist" aria-label="Creator Mode panels">
+            <button type="button" class="creator-toggle-btn" id="creator-tab-vocab" data-panel="vocab" role="tab" aria-controls="creator-panel-vocab" aria-selected="true">Vocab</button>
+            <button type="button" class="creator-toggle-btn" id="creator-tab-list" data-panel="list" role="tab" aria-controls="creator-panel-list" aria-selected="false" tabindex="-1">Your List</button>
+            <button type="button" class="creator-toggle-btn" id="creator-tab-notes" data-panel="notes" role="tab" aria-controls="creator-panel-notes" aria-selected="false" tabindex="-1">Your Notes</button>
+          </div>
+        </div>
+        <div id="creator-panel-vocab" class="creator-panel is-active" data-panel="vocab" role="tabpanel" aria-labelledby="creator-tab-vocab">
+          <div id="vocab-list"></div>
+        </div>
+        <div id="creator-panel-list" class="creator-panel creator-only" data-panel="list" role="tabpanel" aria-labelledby="creator-tab-list" aria-hidden="true">
+          <div id="creator-list-content" class="creator-panel-content"></div>
+        </div>
+        <div id="creator-panel-notes" class="creator-panel creator-only" data-panel="notes" role="tabpanel" aria-labelledby="creator-tab-notes" aria-hidden="true">
+          <div id="creator-notes-content" class="creator-panel-content"></div>
+        </div>
       </section>
     </aside>
   </div>
