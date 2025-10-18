@@ -32,32 +32,19 @@
     <!-- Right side: notes (top) + vocab (bottom) -->
     <aside id="right-pane">
       <section id="notes">
-        <h2>Notes</h2>
-        <div id="notes-content">
-          <p><em>Select a word or sentence to add a note.</em></p>
-        </div>
-      </section>
-
-      <!-- separator between notes and vocab (non-scrolling) -->
-      <div class="notes-vocab-sep" aria-hidden="true"></div>
-
-      <section id="vocab">
         <div class="pane-header">
-          <h2>Vocabulary</h2>
-          <div id="creator-pane-toggle" class="creator-only" role="tablist" aria-label="Creator panels">
-            <button type="button" class="pane-tab" data-pane="whitaker-pane" role="tab" aria-selected="true">Vocab</button>
-            <button type="button" class="pane-tab" data-pane="your-vocab-pane" role="tab" aria-selected="false">Your Vocab</button>
-            <button type="button" class="pane-tab" data-pane="your-notes-pane" role="tab" aria-selected="false">Your Notes</button>
+          <h2>Notes</h2>
+          <div id="creator-notes-toggle" class="creator-only pane-toggle" role="tablist" aria-label="Notes panels" data-pane-group="notes">
+            <button type="button" class="pane-tab" data-pane="book-notes-pane" data-pane-group="notes" role="tab" aria-selected="true">Notes</button>
+            <button type="button" class="pane-tab" data-pane="your-notes-pane" data-pane-group="notes" role="tab" aria-selected="false">Your Notes</button>
           </div>
         </div>
-        <div id="whitaker-pane" class="pane-section" data-pane-target="whitaker-pane">
-          <div id="vocab-list"></div>
+        <div id="book-notes-pane" class="pane-section" data-pane-target="book-notes-pane" data-pane-group="notes">
+          <div id="notes-content">
+            <p><em>Select a word or sentence to add a note.</em></p>
+          </div>
         </div>
-        <div id="your-vocab-pane" class="pane-section creator-only" data-pane-target="your-vocab-pane" hidden>
-          <p class="creator-hint">Words you add here appear as soft pink highlights in the Latin text.</p>
-          <div id="your-vocab-list" class="creator-list"></div>
-        </div>
-        <div id="your-notes-pane" class="pane-section creator-only" data-pane-target="your-notes-pane" hidden>
+        <div id="your-notes-pane" class="pane-section creator-only" data-pane-target="your-notes-pane" data-pane-group="notes" hidden>
           <p class="creator-hint">Your personal notes show as gentle red highlights. Add one with the plus sign.</p>
           <div id="your-notes-controls" class="creator-only" aria-label="Add a custom note" role="group">
             <button type="button" id="your-notes-add" class="creator-plus-btn" aria-label="Add a custom note">＋</button>
@@ -77,6 +64,26 @@
             </div>
           </form>
           <div id="your-notes-list" class="creator-notes-list"></div>
+        </div>
+      </section>
+
+      <!-- separator between notes and vocab (non-scrolling) -->
+      <div class="notes-vocab-sep" aria-hidden="true"></div>
+
+      <section id="vocab">
+        <div class="pane-header">
+          <h2>Vocabulary</h2>
+          <div id="creator-pane-toggle" class="creator-only pane-toggle" role="tablist" aria-label="Vocabulary panels" data-pane-group="vocab">
+            <button type="button" class="pane-tab" data-pane="whitaker-pane" data-pane-group="vocab" role="tab" aria-selected="true">Vocab</button>
+            <button type="button" class="pane-tab" data-pane="your-vocab-pane" data-pane-group="vocab" role="tab" aria-selected="false">Your Vocab</button>
+          </div>
+        </div>
+        <div id="whitaker-pane" class="pane-section" data-pane-target="whitaker-pane" data-pane-group="vocab">
+          <div id="vocab-list"></div>
+        </div>
+        <div id="your-vocab-pane" class="pane-section creator-only" data-pane-target="your-vocab-pane" data-pane-group="vocab" hidden>
+          <p class="creator-hint">Words you add here appear as soft pink highlights in the Latin text.</p>
+          <div id="your-vocab-list" class="creator-list"></div>
         </div>
       </section>
     </aside>

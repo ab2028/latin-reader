@@ -35,7 +35,7 @@ body.creator-mode .creator-only {
   display: block;
 }
 
-body.creator-mode #creator-pane-toggle {
+body.creator-mode .pane-toggle {
   display: flex;
 }
 
@@ -360,7 +360,7 @@ body.high-contrast .note-entry b {
   overflow-y: auto;
   padding: 1rem 0.6rem;
 }
-#vocab .pane-header {
+.pane-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -368,7 +368,7 @@ body.high-contrast .note-entry b {
   margin-bottom: 0.8rem;
 }
 
-#creator-pane-toggle {
+.pane-toggle {
   display: none;
   gap: 0.4rem;
   background: rgba(255, 255, 255, 0.6);
@@ -407,7 +407,7 @@ body.high-contrast .note-entry b {
   transform: translateY(-1px);
 }
 
-body.high-contrast #creator-pane-toggle {
+body.high-contrast .pane-toggle {
   background: rgba(24, 24, 24, 0.9);
   border-color: rgba(255, 255, 255, 0.12);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);

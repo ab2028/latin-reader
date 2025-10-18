@@ -23,7 +23,11 @@ let userNotesEntries = [];
 let userVocabByNormalized = new Map();
 let userNotesById = new Map();
 let currentLatinText = '';
-let activeCreatorPane = 'whitaker-pane';
+const CREATOR_PANE_DEFAULTS = {
+  vocab: 'whitaker-pane',
+  notes: 'book-notes-pane',
+};
+let activeCreatorPanes = { ...CREATOR_PANE_DEFAULTS };
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -193,11 +197,35 @@ if (document.readyState === 'loading') {
   applyCreatorModeClass();
 }
 
+function getActivePaneForGroup(group) {
+  const fallback = CREATOR_PANE_DEFAULTS[group] || null;
+  if (!creatorModeEnabled) return fallback;
+  return activeCreatorPanes[group] || fallback;
+}
+
 function updateCreatorPaneVisibility() {
-  const nav = document.getElementById('creator-pane-toggle');
-  if (nav) {
+  const navs = document.querySelectorAll('.pane-toggle');
+  navs.forEach((nav) => {
+    const group = nav.dataset.paneGroup || 'vocab';
+    const defaultPane = CREATOR_PANE_DEFAULTS[group];
+    const activePane = getActivePaneForGroup(group);
+
     nav.hidden = !creatorModeEnabled;
-  }
+
+    const tabs = nav.querySelectorAll('[data-pane]');
+    tabs.forEach((tab) => {
+      const paneId = tab.dataset.pane;
+      const tabGroup = tab.dataset.paneGroup || group;
+      const tabDefault = CREATOR_PANE_DEFAULTS[tabGroup] || defaultPane;
+      const isDefault = paneId === tabDefault;
+      const shouldHide = !creatorModeEnabled && !isDefault;
+      tab.hidden = !!shouldHide;
+      const isActive = creatorModeEnabled ? paneId === activePane : isDefault;
+      tab.classList.toggle('active', !shouldHide && isActive);
+      tab.setAttribute('aria-selected', !shouldHide && isActive ? 'true' : 'false');
+      tab.tabIndex = shouldHide ? -1 : 0;
+    });
+  });
 
   const panes = document.querySelectorAll('[data-pane-target]');
   panes.forEach((section) => {
@@ -236,16 +264,19 @@ function setActiveCreatorPane(paneId) {
 }
 
 function initializeCreatorPaneToggle() {
-  const nav = document.getElementById('creator-pane-toggle');
-  if (!nav || nav.dataset.bound === 'true') return;
-  nav.dataset.bound = 'true';
-  nav.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-pane]');
-    if (!button) return;
-    const paneId = button.dataset.pane;
-    if (!paneId) return;
-    event.preventDefault();
-    setActiveCreatorPane(paneId);
+  const navs = document.querySelectorAll('.pane-toggle');
+  navs.forEach((nav) => {
+    if (nav.dataset.bound === 'true') return;
+    nav.dataset.bound = 'true';
+    nav.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-pane]');
+      if (!button) return;
+      const paneId = button.dataset.pane;
+      if (!paneId) return;
+      const group = button.dataset.paneGroup || nav.dataset.paneGroup;
+      event.preventDefault();
+      setActiveCreatorPane(paneId, group);
+    });
   });
 }
 
@@ -504,7 +535,7 @@ function focusCustomNoteInPanel(noteId) {
   const target = container.querySelector(`.note-entry[data-note-id="${noteId}"]`);
   if (!target) return;
   if (creatorModeEnabled) {
-    setActiveCreatorPane('your-notes-pane');
+    setActiveCreatorPane('your-notes-pane', 'notes');
   }
   target.classList.add('highlight');
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -548,7 +579,7 @@ function initializeCreatorNotesForm() {
     form.reset();
     form.setAttribute('hidden', '');
     addBtn.setAttribute('aria-expanded', 'false');
-    setActiveCreatorPane('your-notes-pane');
+    setActiveCreatorPane('your-notes-pane', 'notes');
   });
 }
 
@@ -778,7 +809,7 @@ function renderLookupResult(originalWord, lookedUpWord, text, sourceUrl) {
       status.textContent = result.message;
       defInput.value = '';
       defInput.focus();
-      setActiveCreatorPane('your-vocab-pane');
+      setActiveCreatorPane('your-vocab-pane', 'vocab');
       setTimeout(() => {
         status.textContent = '';
       }, 3000);
@@ -1415,7 +1446,7 @@ async function bootstrapApp() {
   renderYourVocabList();
   renderYourNotesList();
   if (!creatorModeEnabled) {
-    activeCreatorPane = 'whitaker-pane';
+    activeCreatorPanes = { ...CREATOR_PANE_DEFAULTS };
   }
   updateCreatorPaneVisibility();
 
