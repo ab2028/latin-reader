@@ -230,26 +230,36 @@ function updateCreatorPaneVisibility() {
   const panes = document.querySelectorAll('[data-pane-target]');
   panes.forEach((section) => {
     const paneId = section.dataset.paneTarget;
-    const group = section.dataset.paneGroup || 'vocab';
     if (!paneId) return;
-    const defaultPane = CREATOR_PANE_DEFAULTS[group];
-    const activePane = getActivePaneForGroup(group);
-    const shouldShow = creatorModeEnabled ? paneId === activePane : paneId === defaultPane;
+    if (!creatorModeEnabled && paneId !== 'whitaker-pane') {
+      section.setAttribute('hidden', '');
+      return;
+    }
+    const shouldShow = paneId === activeCreatorPane || (!creatorModeEnabled && paneId === 'whitaker-pane');
     if (shouldShow) {
       section.removeAttribute('hidden');
     } else {
       section.setAttribute('hidden', '');
     }
   });
+
+  if (!nav) return;
+  const tabs = nav.querySelectorAll('[data-pane]');
+  tabs.forEach((tab) => {
+    const paneId = tab.dataset.pane;
+    const shouldHide = !creatorModeEnabled && paneId !== 'whitaker-pane';
+    tab.hidden = !!shouldHide;
+    const isActive = paneId === activeCreatorPane;
+    tab.classList.toggle('active', !shouldHide && isActive);
+    tab.setAttribute('aria-selected', !shouldHide && isActive ? 'true' : 'false');
+    tab.tabIndex = !shouldHide ? 0 : -1;
+  });
 }
 
-function setActiveCreatorPane(paneId, groupHint) {
+function setActiveCreatorPane(paneId) {
   if (!paneId) return;
-  const paneEl = document.querySelector(`[data-pane-target="${paneId}"]`);
-  const resolvedGroup = groupHint || (paneEl ? paneEl.dataset.paneGroup : null) || 'vocab';
-  const defaultPane = CREATOR_PANE_DEFAULTS[resolvedGroup];
-  if (!creatorModeEnabled && paneId !== defaultPane) return;
-  activeCreatorPanes[resolvedGroup] = paneId;
+  if (!creatorModeEnabled && paneId !== 'whitaker-pane') return;
+  activeCreatorPane = paneId;
   updateCreatorPaneVisibility();
 }
 
