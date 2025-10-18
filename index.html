@@ -42,8 +42,42 @@
       <div class="notes-vocab-sep" aria-hidden="true"></div>
 
       <section id="vocab">
-        <h2>Vocabulary</h2>
-        <div id="vocab-list"></div>
+        <div class="pane-header">
+          <h2>Vocabulary</h2>
+          <div id="creator-pane-toggle" class="creator-only" role="tablist" aria-label="Creator panels">
+            <button type="button" class="pane-tab" data-pane="whitaker-pane" role="tab" aria-selected="true">Vocab</button>
+            <button type="button" class="pane-tab" data-pane="your-vocab-pane" role="tab" aria-selected="false">Your Vocab</button>
+            <button type="button" class="pane-tab" data-pane="your-notes-pane" role="tab" aria-selected="false">Your Notes</button>
+          </div>
+        </div>
+        <div id="whitaker-pane" class="pane-section" data-pane-target="whitaker-pane">
+          <div id="vocab-list"></div>
+        </div>
+        <div id="your-vocab-pane" class="pane-section creator-only" data-pane-target="your-vocab-pane" hidden>
+          <p class="creator-hint">Words you add here appear as soft pink highlights in the Latin text.</p>
+          <div id="your-vocab-list" class="creator-list"></div>
+        </div>
+        <div id="your-notes-pane" class="pane-section creator-only" data-pane-target="your-notes-pane" hidden>
+          <p class="creator-hint">Your personal notes show as gentle red highlights. Add one with the plus sign.</p>
+          <div id="your-notes-controls" class="creator-only" aria-label="Add a custom note" role="group">
+            <button type="button" id="your-notes-add" class="creator-plus-btn" aria-label="Add a custom note">＋</button>
+          </div>
+          <form id="your-notes-form" class="creator-inline-form creator-only" aria-label="Create a custom note" hidden>
+            <label class="creator-field">
+              <span>Word or phrase</span>
+              <input type="text" id="your-notes-word" name="phrase" required>
+            </label>
+            <label class="creator-field">
+              <span>Your note</span>
+              <textarea id="your-notes-text" name="note" rows="3" required></textarea>
+            </label>
+            <div class="creator-form-actions">
+              <button type="submit" class="creator-primary">Save note</button>
+              <button type="button" id="your-notes-cancel" class="creator-secondary">Cancel</button>
+            </div>
+          </form>
+          <div id="your-notes-list" class="creator-notes-list"></div>
+        </div>
       </section>
     </aside>
   </div>
