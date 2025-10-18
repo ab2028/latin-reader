@@ -20,10 +20,6 @@
         <button class="chapter-btn" data-ch="22">Chapter 22</button>
       </nav>
     </header>
-    <!-- top-center instructions button -->
-    <div id="instructions-anchor">
-      <button id="instructions-btn" aria-haspopup="dialog" aria-controls="instructions-modal">Instructions!</button>
-    </div>
     <!-- Latin text -->
     <main id="latin-text">
       <p>Loading Latin text…</p>
@@ -90,10 +86,14 @@
   </div>
 
   <script src="script.js"></script>
-  <div id="contrast-controls" class="contrast-controls" role="group" aria-label="Display mode">
+  <div id="control-dock" class="contrast-controls" role="group" aria-label="Reader controls">
     <button type="button" class="contrast-btn" data-theme="default" aria-pressed="false">Default</button>
     <button type="button" class="contrast-btn" data-theme="high" aria-pressed="false">High Contrast</button>
+    <button type="button" id="instructions-btn" class="dock-btn" aria-haspopup="dialog" aria-controls="instructions-modal">Instructions</button>
+    <button type="button" id="import-data-btn" class="dock-btn creator-only">Import</button>
+    <button type="button" id="export-data-btn" class="dock-btn creator-only">Export</button>
   </div>
+  <input type="file" id="import-file-input" accept="application/json" hidden>
   <!-- Inline modal for instructions -->
   <div id="instructions-modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-overlay" data-action="close"></div>
