@@ -11,6 +11,19 @@ const THEME_DEFAULT = 'default';
 const THEME_HIGH = 'high';
 let themeStorageWriteWarningShown = false;
 let themeStorageReadWarningShown = false;
+const CREATOR_MODE_STORAGE_KEY = 'latin-reader-creator-mode';
+const CREATOR_VOCAB_STORAGE_KEY = 'latin-reader-your-vocab';
+const CREATOR_NOTES_STORAGE_KEY = 'latin-reader-your-notes';
+let creatorModeEnabled = false;
+let creatorModeShortcutBound = false;
+let creatorStorageWriteWarningShown = false;
+let creatorStorageReadWarningShown = false;
+let userVocabEntries = [];
+let userNotesEntries = [];
+let userVocabByNormalized = new Map();
+let userNotesById = new Map();
+let currentLatinText = '';
+let activeCreatorPane = 'whitaker-pane';
 
 /* ---------- basic utilities ---------- */
 function normalize(w) {
@@ -25,6 +38,518 @@ function stripEnclitic(w) {
   if (w.endsWith("ve") && w.length > 3) return w.slice(0, -2);
   if (w.endsWith("ne") && w.length > 3) return w.slice(0, -2);
   return w;
+}
+
+/* ---------- creator mode persistence ---------- */
+function loadCreatorModeFlag() {
+  try {
+    const stored = localStorage.getItem(CREATOR_MODE_STORAGE_KEY);
+    return stored === 'true';
+  } catch (err) {
+    if (!creatorStorageReadWarningShown) {
+      console.warn('Unable to read creator mode flag', err);
+      creatorStorageReadWarningShown = true;
+    }
+    return false;
+  }
+}
+
+function persistCreatorModeFlag(value) {
+  try {
+    localStorage.setItem(CREATOR_MODE_STORAGE_KEY, value ? 'true' : 'false');
+  } catch (err) {
+    if (!creatorStorageWriteWarningShown) {
+      console.warn('Unable to persist creator mode flag', err);
+      creatorStorageWriteWarningShown = true;
+    }
+  }
+}
+
+function readCreatorCollection(key, fallback) {
+  const base = Array.isArray(fallback) ? [...fallback] : fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return base;
+    const parsed = JSON.parse(raw);
+    return parsed;
+  } catch (err) {
+    if (!creatorStorageReadWarningShown) {
+      console.warn('Unable to read creator collection', key, err);
+      creatorStorageReadWarningShown = true;
+    }
+    return base;
+  }
+}
+
+function writeCreatorCollection(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    if (!creatorStorageWriteWarningShown) {
+      console.warn('Unable to persist creator collection', key, err);
+      creatorStorageWriteWarningShown = true;
+    }
+  }
+}
+
+function normalizeCreatorVocabEntries(rawEntries) {
+  if (!Array.isArray(rawEntries)) return [];
+  const entries = [];
+  for (const item of rawEntries) {
+    const word = (item && item.word) ? String(item.word).trim() : '';
+    const definition = (item && item.definition) ? String(item.definition).trim() : '';
+    const normalized = normalize(word);
+    if (!word || !normalized || !definition) continue;
+    const id = item && item.id ? String(item.id) : `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    entries.push({ id, word, definition, normalized });
+  }
+  return entries;
+}
+
+function normalizeCreatorNotesEntries(rawEntries) {
+  if (!Array.isArray(rawEntries)) return [];
+  const entries = [];
+  for (const item of rawEntries) {
+    const phrase = (item && (item.phrase || item.word)) ? String(item.phrase || item.word).trim() : '';
+    const note = (item && (item.note || item.text)) ? String(item.note || item.text).trim() : '';
+    if (!phrase || !note) continue;
+    const tokens = phrase.split(/\s+/).map(normalize).filter(Boolean);
+    if (!tokens.length) continue;
+    const id = item && item.id ? String(item.id) : `n-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    entries.push({ id, phrase, note, tokens });
+  }
+  return entries;
+}
+
+function loadCreatorCollections() {
+  const vocabRaw = readCreatorCollection(CREATOR_VOCAB_STORAGE_KEY, []);
+  const notesRaw = readCreatorCollection(CREATOR_NOTES_STORAGE_KEY, []);
+  userVocabEntries = normalizeCreatorVocabEntries(vocabRaw);
+  userNotesEntries = normalizeCreatorNotesEntries(notesRaw);
+  rebuildCreatorCaches();
+}
+
+function persistUserVocab() {
+  writeCreatorCollection(CREATOR_VOCAB_STORAGE_KEY, userVocabEntries);
+}
+
+function persistUserNotes() {
+  writeCreatorCollection(CREATOR_NOTES_STORAGE_KEY, userNotesEntries);
+}
+
+function rebuildCreatorCaches() {
+  userVocabByNormalized = new Map();
+  for (const entry of userVocabEntries) {
+    if (!entry || !entry.normalized) continue;
+    if (!userVocabByNormalized.has(entry.normalized)) {
+      userVocabByNormalized.set(entry.normalized, []);
+    }
+    userVocabByNormalized.get(entry.normalized).push(entry);
+  }
+
+  userNotesById = new Map();
+  for (const entry of userNotesEntries) {
+    if (!entry || !entry.id) continue;
+    userNotesById.set(entry.id, entry);
+  }
+}
+
+function ensureCreatorModeShortcut() {
+  if (creatorModeShortcutBound) return;
+  creatorModeShortcutBound = true;
+  document.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && event.altKey && event.shiftKey) {
+      const key = event.key || '';
+      if (key.toLowerCase() === 'l') {
+        event.preventDefault();
+        toggleCreatorMode();
+      }
+    }
+  });
+}
+
+function toggleCreatorMode() {
+  creatorModeEnabled = !creatorModeEnabled;
+  persistCreatorModeFlag(creatorModeEnabled);
+  const message = creatorModeEnabled ? 'Creator Mode activated. Reloading…' : 'Creator Mode deactivated. Reloading…';
+  alert(message);
+  window.location.reload();
+}
+
+function applyCreatorModeClass() {
+  const body = document.body;
+  if (!body) return;
+  body.classList.toggle('creator-mode', creatorModeEnabled);
+}
+
+creatorModeEnabled = loadCreatorModeFlag();
+loadCreatorCollections();
+ensureCreatorModeShortcut();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    applyCreatorModeClass();
+  }, { once: true });
+} else {
+  applyCreatorModeClass();
+}
+
+function updateCreatorPaneVisibility() {
+  const nav = document.getElementById('creator-pane-toggle');
+  if (nav) {
+    nav.hidden = !creatorModeEnabled;
+  }
+
+  const panes = document.querySelectorAll('[data-pane-target]');
+  panes.forEach((section) => {
+    const paneId = section.dataset.paneTarget;
+    if (!paneId) return;
+    if (!creatorModeEnabled && paneId !== 'whitaker-pane') {
+      section.setAttribute('hidden', '');
+      return;
+    }
+    const shouldShow = paneId === activeCreatorPane || (!creatorModeEnabled && paneId === 'whitaker-pane');
+    if (shouldShow) {
+      section.removeAttribute('hidden');
+    } else {
+      section.setAttribute('hidden', '');
+    }
+  });
+
+  if (!nav) return;
+  const tabs = nav.querySelectorAll('[data-pane]');
+  tabs.forEach((tab) => {
+    const paneId = tab.dataset.pane;
+    const shouldHide = !creatorModeEnabled && paneId !== 'whitaker-pane';
+    tab.hidden = !!shouldHide;
+    const isActive = paneId === activeCreatorPane;
+    tab.classList.toggle('active', !shouldHide && isActive);
+    tab.setAttribute('aria-selected', !shouldHide && isActive ? 'true' : 'false');
+    tab.tabIndex = !shouldHide ? 0 : -1;
+  });
+}
+
+function setActiveCreatorPane(paneId) {
+  if (!paneId) return;
+  if (!creatorModeEnabled && paneId !== 'whitaker-pane') return;
+  activeCreatorPane = paneId;
+  updateCreatorPaneVisibility();
+}
+
+function initializeCreatorPaneToggle() {
+  const nav = document.getElementById('creator-pane-toggle');
+  if (!nav || nav.dataset.bound === 'true') return;
+  nav.dataset.bound = 'true';
+  nav.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-pane]');
+    if (!button) return;
+    const paneId = button.dataset.pane;
+    if (!paneId) return;
+    event.preventDefault();
+    setActiveCreatorPane(paneId);
+  });
+}
+
+function rerenderLatinTextPreservingScroll() {
+  const latin = document.getElementById('latin-text');
+  if (!latin || !currentLatinText) return;
+  const scroll = latin.scrollTop;
+  renderLatinText(currentLatinText);
+  latin.scrollTop = scroll;
+}
+
+function renderYourVocabList() {
+  const container = document.getElementById('your-vocab-list');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!userVocabEntries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'creator-empty';
+    empty.textContent = 'No saved words yet. Use Whitaker’s panel to add some.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const entries = [...userVocabEntries].sort((a, b) => a.word.localeCompare(b.word, undefined, { sensitivity: 'base' }));
+  for (const entry of entries) {
+    const card = document.createElement('div');
+    card.className = 'creator-entry';
+    card.dataset.vocabId = entry.id;
+
+    const heading = document.createElement('h3');
+    heading.textContent = entry.word;
+    card.appendChild(heading);
+
+    const body = document.createElement('p');
+    body.textContent = entry.definition;
+    card.appendChild(body);
+
+    const actions = document.createElement('div');
+    actions.className = 'creator-entry-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.textContent = 'Edit definition';
+    editBtn.addEventListener('click', () => promptEditUserVocabEntry(entry.id));
+    actions.appendChild(editBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => deleteUserVocabEntry(entry.id));
+    actions.appendChild(deleteBtn);
+
+    card.appendChild(actions);
+    container.appendChild(card);
+  }
+}
+
+function renderYourNotesList() {
+  const container = document.getElementById('your-notes-list');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!userNotesEntries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'creator-empty';
+    empty.textContent = 'No custom notes yet.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const entries = [...userNotesEntries].sort((a, b) => a.phrase.localeCompare(b.phrase, undefined, { sensitivity: 'base' }));
+  for (const entry of entries) {
+    const card = document.createElement('div');
+    card.className = 'note-entry creator-note-entry';
+    card.dataset.noteId = entry.id;
+    card.innerHTML = `<b>${escapeHtml(entry.phrase)}</b><div class="note-text">${renderRichText(entry.note)}</div>`;
+
+    card.addEventListener('click', () => {
+      card.classList.add('highlight');
+      setTimeout(() => card.classList.remove('highlight'), 1200);
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'creator-entry-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.textContent = 'Edit note';
+    editBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      promptEditUserNoteEntry(entry.id);
+    });
+    actions.appendChild(editBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      deleteUserNoteEntry(entry.id);
+    });
+    actions.appendChild(deleteBtn);
+
+    card.appendChild(actions);
+    container.appendChild(card);
+  }
+}
+
+function addOrUpdateUserVocab(word, definition) {
+  if (!creatorModeEnabled) {
+    return { success: false, message: 'Creator Mode is disabled.' };
+  }
+  const trimmedWord = (word || '').trim();
+  const trimmedDefinition = (definition || '').trim();
+  const normalized = normalize(trimmedWord);
+  if (!trimmedWord || !normalized) {
+    return { success: false, message: 'Please provide a word to save.' };
+  }
+  if (!trimmedDefinition) {
+    return { success: false, message: 'Please enter a definition.' };
+  }
+
+  const existing = userVocabEntries.find((entry) => entry.normalized === normalized && entry.word.toLowerCase() === trimmedWord.toLowerCase());
+  if (existing) {
+    existing.word = trimmedWord;
+    existing.definition = trimmedDefinition;
+  } else {
+    userVocabEntries.push({
+      id: `v-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      word: trimmedWord,
+      definition: trimmedDefinition,
+      normalized,
+    });
+  }
+
+  persistUserVocab();
+  rebuildCreatorCaches();
+  renderYourVocabList();
+  rerenderLatinTextPreservingScroll();
+  return { success: true, message: existing ? 'Definition updated.' : 'Added to your vocab list.' };
+}
+
+function deleteUserVocabEntry(id) {
+  const idx = userVocabEntries.findIndex((entry) => entry.id === id);
+  if (idx === -1) return;
+  const entry = userVocabEntries[idx];
+  if (!confirm(`Remove “${entry.word}” from your vocab list?`)) return;
+  userVocabEntries.splice(idx, 1);
+  persistUserVocab();
+  rebuildCreatorCaches();
+  renderYourVocabList();
+  rerenderLatinTextPreservingScroll();
+}
+
+function promptEditUserVocabEntry(id) {
+  const entry = userVocabEntries.find((item) => item.id === id);
+  if (!entry) return;
+  const nextDefinition = prompt(`Edit definition for “${entry.word}”`, entry.definition);
+  if (nextDefinition === null) return;
+  const trimmed = nextDefinition.trim();
+  if (!trimmed) {
+    alert('Definition cannot be empty.');
+    return;
+  }
+  entry.definition = trimmed;
+  persistUserVocab();
+  rebuildCreatorCaches();
+  renderYourVocabList();
+  rerenderLatinTextPreservingScroll();
+}
+
+function addUserNoteEntry(phrase, note) {
+  if (!creatorModeEnabled) {
+    return { success: false, message: 'Creator Mode is disabled.' };
+  }
+  const trimmedPhrase = (phrase || '').trim();
+  const trimmedNote = (note || '').trim();
+  if (!trimmedPhrase) {
+    return { success: false, message: 'Please enter a word or phrase.' };
+  }
+  if (!trimmedNote) {
+    return { success: false, message: 'Please enter a note.' };
+  }
+  const tokens = trimmedPhrase.split(/\s+/).map(normalize).filter(Boolean);
+  if (!tokens.length) {
+    return { success: false, message: 'Unable to recognize words in that phrase.' };
+  }
+
+  const existing = userNotesEntries.find((entry) => entry.tokens.length === tokens.length && entry.tokens.every((t, idx) => t === tokens[idx]));
+  if (existing) {
+    existing.phrase = trimmedPhrase;
+    existing.note = trimmedNote;
+    existing.tokens = tokens;
+  } else {
+    userNotesEntries.push({
+      id: `n-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      phrase: trimmedPhrase,
+      note: trimmedNote,
+      tokens,
+    });
+  }
+
+  persistUserNotes();
+  rebuildCreatorCaches();
+  renderYourNotesList();
+  rerenderLatinTextPreservingScroll();
+  return { success: true, message: existing ? 'Note updated.' : 'Note added.' };
+}
+
+function promptEditUserNoteEntry(id) {
+  const entry = userNotesEntries.find((item) => item.id === id);
+  if (!entry) return;
+  const nextPhrase = prompt('Edit the word or phrase for this note:', entry.phrase);
+  if (nextPhrase === null) return;
+  const trimmedPhrase = nextPhrase.trim();
+  if (!trimmedPhrase) {
+    alert('Phrase cannot be empty.');
+    return;
+  }
+  const tokens = trimmedPhrase.split(/\s+/).map(normalize).filter(Boolean);
+  if (!tokens.length) {
+    alert('Unable to recognize words in that phrase.');
+    return;
+  }
+  const nextNote = prompt('Update your note:', entry.note);
+  if (nextNote === null) return;
+  const trimmedNote = nextNote.trim();
+  if (!trimmedNote) {
+    alert('Note cannot be empty.');
+    return;
+  }
+  entry.phrase = trimmedPhrase;
+  entry.note = trimmedNote;
+  entry.tokens = tokens;
+  persistUserNotes();
+  rebuildCreatorCaches();
+  renderYourNotesList();
+  rerenderLatinTextPreservingScroll();
+}
+
+function deleteUserNoteEntry(id) {
+  const idx = userNotesEntries.findIndex((entry) => entry.id === id);
+  if (idx === -1) return;
+  const entry = userNotesEntries[idx];
+  if (!confirm(`Delete your note for “${entry.phrase}”?`)) return;
+  userNotesEntries.splice(idx, 1);
+  persistUserNotes();
+  rebuildCreatorCaches();
+  renderYourNotesList();
+  rerenderLatinTextPreservingScroll();
+}
+
+function focusCustomNoteInPanel(noteId) {
+  if (!noteId) return;
+  const container = document.getElementById('your-notes-list');
+  if (!container) return;
+  const target = container.querySelector(`.note-entry[data-note-id="${noteId}"]`);
+  if (!target) return;
+  if (creatorModeEnabled) {
+    setActiveCreatorPane('your-notes-pane');
+  }
+  target.classList.add('highlight');
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => target.classList.remove('highlight'), 1200);
+}
+
+function initializeCreatorNotesForm() {
+  const addBtn = document.getElementById('your-notes-add');
+  const form = document.getElementById('your-notes-form');
+  const cancelBtn = document.getElementById('your-notes-cancel');
+  const phraseInput = document.getElementById('your-notes-word');
+  const noteInput = document.getElementById('your-notes-text');
+  if (!addBtn || !form || !phraseInput || !noteInput) return;
+  addBtn.setAttribute('aria-expanded', 'false');
+
+  addBtn.addEventListener('click', () => {
+    if (!creatorModeEnabled) return;
+    form.removeAttribute('hidden');
+    addBtn.setAttribute('aria-expanded', 'true');
+    phraseInput.value = '';
+    noteInput.value = '';
+    phraseInput.focus();
+  });
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      form.setAttribute('hidden', '');
+      addBtn.setAttribute('aria-expanded', 'false');
+      form.reset();
+    });
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!creatorModeEnabled) return;
+    const result = addUserNoteEntry(phraseInput.value, noteInput.value);
+    if (!result.success) {
+      if (result.message) alert(result.message);
+      return;
+    }
+    form.reset();
+    form.setAttribute('hidden', '');
+    addBtn.setAttribute('aria-expanded', 'false');
+    setActiveCreatorPane('your-notes-pane');
+  });
 }
 
 function applyTheme(theme, options = {}) {
@@ -199,6 +724,70 @@ function renderLookupResult(originalWord, lookedUpWord, text, sourceUrl) {
   vocabList.appendChild(header);
   vocabList.appendChild(pre);
   vocabList.appendChild(footer);
+
+  if (creatorModeEnabled) {
+    const creatorBlock = document.createElement('div');
+    creatorBlock.className = 'creator-add-vocab';
+    const title = document.createElement('h3');
+    title.textContent = 'Add to your vocab list';
+    creatorBlock.appendChild(title);
+
+    const form = document.createElement('form');
+    form.className = 'creator-inline-form';
+
+    const wordField = document.createElement('label');
+    wordField.className = 'creator-field';
+    wordField.innerHTML = '<span>Word</span>';
+    const wordInput = document.createElement('input');
+    wordInput.type = 'text';
+    wordInput.value = originalWord || '';
+    wordInput.required = true;
+    wordField.appendChild(wordInput);
+
+    const defField = document.createElement('label');
+    defField.className = 'creator-field';
+    defField.innerHTML = '<span>Your definition</span>';
+    const defInput = document.createElement('textarea');
+    defInput.rows = 3;
+    defInput.required = true;
+    defField.appendChild(defInput);
+
+    const actions = document.createElement('div');
+    actions.className = 'creator-form-actions';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'submit';
+    saveBtn.className = 'creator-primary';
+    saveBtn.textContent = 'Save word';
+    actions.appendChild(saveBtn);
+
+    form.appendChild(wordField);
+    form.appendChild(defField);
+    form.appendChild(actions);
+
+    const status = document.createElement('p');
+    status.className = 'creator-status';
+    status.textContent = '';
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const result = addOrUpdateUserVocab(wordInput.value, defInput.value);
+      if (!result.success) {
+        if (result.message) alert(result.message);
+        return;
+      }
+      status.textContent = result.message;
+      defInput.value = '';
+      defInput.focus();
+      setActiveCreatorPane('your-vocab-pane');
+      setTimeout(() => {
+        status.textContent = '';
+      }, 3000);
+    });
+
+    creatorBlock.appendChild(form);
+    creatorBlock.appendChild(status);
+    vocabList.appendChild(creatorBlock);
+  }
 }
 
 async function lookupWhitakersWords(rawCandidates) {
@@ -457,11 +1046,13 @@ function setChapter(n) {
 }
 
 function renderLatinText(text) {
+  currentLatinText = text;
   const latinContainer = document.getElementById("latin-text");
   latinContainer.innerHTML = "";
 
   const { tokens, wordEntries } = tokenizeText(text);
   const noteMatches = findNoteMatches(wordEntries);
+  const userNoteMatches = creatorModeEnabled ? findUserNoteMatches(wordEntries) : new Map();
 
   const fragment = document.createDocumentFragment();
   let tokenIndex = 0;
@@ -554,13 +1145,56 @@ function renderLatinText(text) {
       continue;
     }
 
+    const customMatch = creatorModeEnabled ? userNoteMatches.get(wordIndex) : null;
+    if (customMatch) {
+      const groupId = `creator-note-${customMatch.note.id}-${tokenIndex}`;
+      let wordsCovered = 0;
+      let j = tokenIndex;
+      while (j < tokens.length && wordsCovered < customMatch.length) {
+        const innerToken = tokens[j];
+        if (innerToken.type === 'word') {
+          const wordSpan = document.createElement('span');
+          wordSpan.classList.add('word', 'creator-note');
+          wordSpan.dataset.noteGroup = groupId;
+          wordSpan.dataset.customNoteId = customMatch.note.id;
+          wordSpan.dataset.raw = innerToken.raw;
+          wordSpan.textContent = innerToken.raw;
+          const tooltip = customMatch.note.note || resolveVocabTooltip(innerToken.clean);
+          if (tooltip) wordSpan.title = customMatch.note.note || tooltip;
+          wordSpan.addEventListener('click', (e) => {
+            if (e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+              focusCustomNoteInPanel(customMatch.note.id);
+            }
+          });
+          fragment.appendChild(wordSpan);
+          wordsCovered++;
+        } else {
+          fragment.appendChild(document.createTextNode(innerToken.raw));
+        }
+        j++;
+      }
+      tokenIndex = j;
+      wordIndex += customMatch.length;
+      continue;
+    }
+
     const span = document.createElement("span");
     span.className = "word";
     span.dataset.raw = token.raw;
     span.textContent = token.raw;
 
-    const tooltip = resolveVocabTooltip(token.clean);
-    if (tooltip) span.title = tooltip;
+    const normalized = token.clean;
+    if (creatorModeEnabled && normalized && userVocabByNormalized.has(normalized)) {
+      span.classList.add('creator-vocab');
+      const entries = userVocabByNormalized.get(normalized);
+      const tooltips = entries.map(e => e.definition ? `${e.word} — ${e.definition}` : e.word);
+      span.title = tooltips.join('\n');
+    } else {
+      const tooltip = resolveVocabTooltip(normalized);
+      if (tooltip) span.title = tooltip;
+    }
 
     fragment.appendChild(span);
     tokenIndex++;
@@ -668,6 +1302,54 @@ function findNoteMatches(wordEntries) {
   return map;
 }
 
+function findUserNoteMatches(wordEntries) {
+  if (!creatorModeEnabled || !userNotesEntries.length) {
+    return new Map();
+  }
+
+  const matches = [];
+  for (const entry of userNotesEntries) {
+    if (!entry.tokens || !entry.tokens.length) continue;
+    for (let i = 0; i <= wordEntries.length - entry.tokens.length; i++) {
+      let ok = true;
+      for (let j = 0; j < entry.tokens.length; j++) {
+        if (wordEntries[i + j].clean !== entry.tokens[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        matches.push({ start: i, length: entry.tokens.length, note: entry });
+      }
+    }
+  }
+
+  matches.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    return a.start - b.start;
+  });
+
+  const occupied = new Set();
+  const map = new Map();
+
+  for (const match of matches) {
+    let conflict = false;
+    for (let i = 0; i < match.length; i++) {
+      if (occupied.has(match.start + i)) {
+        conflict = true;
+        break;
+      }
+    }
+    if (conflict) continue;
+    for (let i = 0; i < match.length; i++) {
+      occupied.add(match.start + i);
+    }
+    map.set(match.start, match);
+  }
+
+  return map;
+}
+
 function resolveVocabTooltip(cleanWord) {
   if (!cleanWord) return "";
   return `Click to look up “${cleanWord}” in Whitaker’s Words.`;
@@ -727,6 +1409,16 @@ function showNoteInPane(noteObj) {
 
 /* ---------- boot ---------- */
 async function bootstrapApp() {
+  applyCreatorModeClass();
+  initializeCreatorPaneToggle();
+  initializeCreatorNotesForm();
+  renderYourVocabList();
+  renderYourNotesList();
+  if (!creatorModeEnabled) {
+    activeCreatorPane = 'whitaker-pane';
+  }
+  updateCreatorPaneVisibility();
+
   // attach chapter button handlers
   document.querySelectorAll('.chapter-btn').forEach(b => {
     b.addEventListener('click', () => setChapter(+b.dataset.ch));

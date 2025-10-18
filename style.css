@@ -27,6 +27,22 @@ body.high-contrast {
   color: var(--ink);
 }
 
+.creator-only {
+  display: none;
+}
+
+body.creator-mode .creator-only {
+  display: block;
+}
+
+body.creator-mode #creator-pane-toggle {
+  display: flex;
+}
+
+body.creator-mode #your-notes-controls {
+  display: flex;
+}
+
 .contrast-controls {
   position: fixed;
   left: 1rem;
@@ -344,6 +360,309 @@ body.high-contrast .note-entry b {
   overflow-y: auto;
   padding: 1rem 0.6rem;
 }
+#vocab .pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+#creator-pane-toggle {
+  display: none;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(120, 100, 80, 0.18);
+  padding: 0.25rem;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(40, 25, 10, 0.06);
+}
+
+.pane-tab {
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.pane-tab:hover {
+  color: var(--ink);
+}
+
+.pane-tab:focus-visible {
+  color: var(--ink);
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.pane-tab.active {
+  background: linear-gradient(180deg, rgba(255, 205, 144, 0.95), rgba(247, 170, 104, 0.95));
+  color: #3a2d13;
+  box-shadow: 0 4px 12px rgba(247, 170, 104, 0.28);
+  transform: translateY(-1px);
+}
+
+body.high-contrast #creator-pane-toggle {
+  background: rgba(24, 24, 24, 0.9);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+body.high-contrast .pane-tab {
+  color: var(--muted);
+}
+
+body.high-contrast .pane-tab.active {
+  background: linear-gradient(180deg, rgba(255, 196, 0, 0.94), rgba(255, 148, 0, 0.94));
+  color: #120900;
+  box-shadow: 0 4px 16px rgba(255, 196, 0, 0.35);
+}
+
+.pane-section {
+  display: block;
+}
+
+.creator-hint {
+  margin: 0 0 0.75rem 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.creator-list,
+.creator-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.creator-empty {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.creator-entry {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  box-shadow: 0 2px 8px rgba(40, 25, 10, 0.06);
+  border-left: 3px solid rgba(255, 192, 203, 0.85);
+}
+
+.creator-entry h3 {
+  margin: 0 0 0.35rem 0;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.creator-entry p {
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.creator-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.creator-entry-actions button {
+  border: 1px solid rgba(120, 100, 80, 0.22);
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.creator-entry-actions button:hover,
+.creator-entry-actions button:focus-visible {
+  background: rgba(247, 213, 110, 0.3);
+  color: var(--ink);
+  outline: none;
+}
+
+body.high-contrast .creator-entry {
+  background: #171717;
+  border-left-color: rgba(255, 150, 170, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+body.high-contrast .creator-entry p {
+  color: var(--muted);
+}
+
+body.high-contrast .creator-entry-actions button {
+  background: rgba(24, 24, 24, 0.9);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--muted);
+}
+
+.creator-note-entry {
+  border-left-color: rgba(255, 140, 140, 0.9);
+}
+
+body.high-contrast .creator-note-entry {
+  border-left-color: rgba(255, 100, 100, 0.95);
+}
+
+#your-notes-controls {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.creator-plus-btn {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  border: 0;
+  background: linear-gradient(180deg, rgba(255, 164, 164, 0.95), rgba(255, 116, 116, 0.95));
+  color: #ffffff;
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 16px rgba(255, 120, 120, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.creator-plus-btn:hover,
+.creator-plus-btn:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(255, 120, 120, 0.36);
+  outline: none;
+}
+
+body.high-contrast .creator-plus-btn {
+  background: linear-gradient(180deg, rgba(255, 120, 120, 0.95), rgba(255, 72, 72, 0.95));
+}
+
+.creator-inline-form {
+  margin: 0.75rem 0 0.85rem 0;
+  padding: 0.75rem 0.85rem;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(40, 25, 10, 0.08);
+}
+
+.creator-add-vocab {
+  margin-top: 0.9rem;
+}
+
+.creator-add-vocab h3 {
+  margin: 0 0 0.6rem 0;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.creator-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.7rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.creator-field input,
+.creator-field textarea {
+  border: 1px solid rgba(120, 100, 80, 0.25);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-family: inherit;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+}
+
+.creator-field textarea {
+  resize: vertical;
+  min-height: 5rem;
+}
+
+.creator-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.creator-primary,
+.creator-secondary {
+  border-radius: 8px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+}
+
+.creator-primary {
+  background: linear-gradient(180deg, rgba(255, 164, 164, 0.95), rgba(255, 116, 116, 0.95));
+  color: #3b2020;
+}
+
+.creator-primary:hover,
+.creator-primary:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(255, 120, 120, 0.28);
+}
+
+.creator-primary:focus-visible,
+.creator-secondary:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.creator-secondary {
+  background: rgba(120, 100, 80, 0.12);
+  color: var(--muted);
+}
+
+.creator-secondary:hover,
+.creator-secondary:focus-visible {
+  background: rgba(120, 100, 80, 0.22);
+  color: var(--ink);
+}
+
+body.high-contrast .creator-inline-form {
+  background: #161616;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
+}
+
+body.high-contrast .creator-field input,
+body.high-contrast .creator-field textarea {
+  background: rgba(34, 34, 34, 0.9);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--ink);
+}
+
+body.high-contrast .creator-primary {
+  color: #1c0000;
+}
+
+body.high-contrast .creator-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.creator-status {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: #7a2f21;
+}
+
+body.high-contrast .creator-status {
+  color: #ffb347;
+}
 #vocab-list {
   display: flex;
   flex-direction: column;
@@ -522,6 +841,60 @@ body.high-contrast .word.note-available:hover::before {
 .word.note-available.note-hover-word::before {
   background: rgba(246,195,36,0.98);
   box-shadow: 0 2px 8px rgba(246,195,36,0.12);
+}
+
+.word.creator-vocab,
+.word.creator-note {
+  position: relative;
+  z-index: 1;
+}
+
+.word.creator-vocab::before,
+.word.creator-note::before {
+  content: "";
+  position: absolute;
+  left: -0.18rem;
+  right: -0.18rem;
+  top: 0.12rem;
+  bottom: 0.12rem;
+  border-radius: 6px;
+  z-index: -1;
+  transition: background 0.18s, transform 0.12s;
+  pointer-events: none;
+}
+
+.word.creator-vocab::before {
+  background: rgba(255, 192, 203, 0.55);
+}
+
+.word.creator-vocab:hover::before {
+  background: rgba(255, 182, 193, 0.75);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.word.creator-note::before {
+  background: rgba(255, 160, 160, 0.55);
+}
+
+.word.creator-note:hover::before {
+  background: rgba(255, 128, 128, 0.75);
+  transform: translateY(-1px) scale(1.01);
+}
+
+body.high-contrast .word.creator-vocab::before {
+  background: rgba(255, 160, 200, 0.45);
+}
+
+body.high-contrast .word.creator-vocab:hover::before {
+  background: rgba(255, 120, 180, 0.65);
+}
+
+body.high-contrast .word.creator-note::before {
+  background: rgba(255, 110, 110, 0.45);
+}
+
+body.high-contrast .word.creator-note:hover::before {
+  background: rgba(255, 80, 80, 0.7);
 }
 
 body.high-contrast .word.note-available.note-hover::before {
