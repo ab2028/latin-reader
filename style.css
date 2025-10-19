@@ -741,6 +741,11 @@ body.high-contrast .creator-status {
   width: 2.4rem;
   height: 2.4rem;
   font-size: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
 }
 .creator-only.lookup-add-btn {
   display: none;
