@@ -920,11 +920,11 @@ body.high-contrast .word.note-available:hover::before {
 }
 
 .word.creator-note::before {
-  background: rgba(255, 160, 160, 0.55);
+  background: rgba(199, 121, 247, 0.381);
 }
 
 .word.creator-note:hover::before {
-  background: rgba(255, 128, 128, 0.75);
+  background: rgba(199, 121, 247, 0.64);
   transform: translateY(-1px) scale(1.01);
 }
 
@@ -937,11 +937,11 @@ body.high-contrast .word.creator-vocab:hover::before {
 }
 
 body.high-contrast .word.creator-note::before {
-  background: rgba(255, 110, 110, 0.45);
+  background: rgba(199, 121, 247, 0.645);
 }
 
 body.high-contrast .word.creator-note:hover::before {
-  background: rgba(255, 80, 80, 0.7);
+  background: rgba(199, 121, 247, 0.358);
 }
 
 body.high-contrast .word.note-available.note-hover::before {
