@@ -19,7 +19,60 @@ const CREATOR_ANNOTATION_TYPES = {
   DIFFICULT: 'difficult',
   QUESTION: 'question',
   SANDWICH: 'sandwich',
+  SUBJECT: 'subject',
+  DIRECT_OBJECT: 'direct-object',
+  VERB: 'verb',
 };
+const CREATOR_ANNOTATION_HOVER_LABELS = {
+  [CREATOR_ANNOTATION_TYPES.SUBJECT]: 'Subject',
+  [CREATOR_ANNOTATION_TYPES.DIRECT_OBJECT]: 'Direct object',
+  [CREATOR_ANNOTATION_TYPES.VERB]: 'Verb',
+};
+const CREATOR_CONTEXT_MENU_ACTIONS = [
+  { action: 'create-note', label: 'Create note' },
+  { action: 'add-to-vocab', label: 'Add to vocab list' },
+  {
+    action: 'mark-subject',
+    label: 'Mark subject',
+    activeLabel: 'Remove subject mark',
+    annotationType: CREATOR_ANNOTATION_TYPES.SUBJECT,
+  },
+  {
+    action: 'mark-direct-object',
+    label: 'Mark direct object',
+    activeLabel: 'Remove direct object mark',
+    annotationType: CREATOR_ANNOTATION_TYPES.DIRECT_OBJECT,
+  },
+  {
+    action: 'mark-verb',
+    label: 'Mark verb',
+    activeLabel: 'Remove verb mark',
+    annotationType: CREATOR_ANNOTATION_TYPES.VERB,
+  },
+  {
+    action: 'flag-difficult',
+    label: 'Flag as difficult',
+    activeLabel: 'Remove difficult flag',
+    annotationType: CREATOR_ANNOTATION_TYPES.DIFFICULT,
+  },
+  {
+    action: 'flag-question',
+    label: 'Flag as question',
+    activeLabel: 'Remove question flag',
+    annotationType: CREATOR_ANNOTATION_TYPES.QUESTION,
+  },
+  {
+    action: 'make-sandwich',
+    label: 'Create sandwich',
+    activeLabel: 'Remove sandwich',
+    annotationType: CREATOR_ANNOTATION_TYPES.SANDWICH,
+  },
+];
+const CREATOR_CONTEXT_MENU_ACTION_LOOKUP = CREATOR_CONTEXT_MENU_ACTIONS.reduce((acc, item) => {
+  acc[item.action] = item;
+  return acc;
+}, {});
+const CREATOR_ANNOTATION_TYPE_SET = new Set(Object.values(CREATOR_ANNOTATION_TYPES));
 let creatorModeEnabled = false;
 let creatorModeShortcutBound = false;
 let creatorStorageWriteWarningShown = false;
@@ -176,14 +229,7 @@ function normalizeCreatorAnnotationsEntries(rawEntries) {
   for (const item of rawEntries) {
     if (!item) continue;
     const rawType = typeof item.type === 'string' ? item.type.trim().toLowerCase() : '';
-    let type = null;
-    if (rawType === CREATOR_ANNOTATION_TYPES.DIFFICULT) {
-      type = CREATOR_ANNOTATION_TYPES.DIFFICULT;
-    } else if (rawType === CREATOR_ANNOTATION_TYPES.QUESTION) {
-      type = CREATOR_ANNOTATION_TYPES.QUESTION;
-    } else if (rawType === CREATOR_ANNOTATION_TYPES.SANDWICH) {
-      type = CREATOR_ANNOTATION_TYPES.SANDWICH;
-    }
+    const type = CREATOR_ANNOTATION_TYPE_SET.has(rawType) ? rawType : null;
     if (!type) continue;
     const startRaw = item.start ?? item.startIndex ?? item.begin ?? item.from;
     const endRaw = item.end ?? item.endIndex ?? item.stop ?? item.to;
@@ -339,6 +385,7 @@ function applyCreatorAnnotationClasses(span, wordIndex, annotationMap) {
   const annotations = annotationMap.get(wordIndex);
   if (!annotations || !annotations.length) return;
   span.classList.add('creator-annotation-word');
+  const tooltipLabels = new Set();
   for (const annotation of annotations) {
     const start = Number(annotation.start);
     const end = Number(annotation.end);
@@ -366,6 +413,25 @@ function applyCreatorAnnotationClasses(span, wordIndex, annotationMap) {
       if (wordIndex === end) {
         span.classList.add('creator-annotation-sandwich-end');
       }
+    } else if (annotation.type === CREATOR_ANNOTATION_TYPES.SUBJECT) {
+      span.classList.add('creator-annotation-grammar', 'creator-annotation-grammar-subject');
+    } else if (annotation.type === CREATOR_ANNOTATION_TYPES.DIRECT_OBJECT) {
+      span.classList.add('creator-annotation-grammar', 'creator-annotation-grammar-direct-object');
+    } else if (annotation.type === CREATOR_ANNOTATION_TYPES.VERB) {
+      span.classList.add('creator-annotation-grammar', 'creator-annotation-grammar-verb');
+    }
+    const hoverLabel = CREATOR_ANNOTATION_HOVER_LABELS[annotation.type];
+    if (hoverLabel) {
+      tooltipLabels.add(hoverLabel);
+    }
+  }
+  if (tooltipLabels.size > 0) {
+    const annotationText = Array.from(tooltipLabels).join(', ');
+    const existingTitle = span.getAttribute('title');
+    if (!existingTitle) {
+      span.setAttribute('title', annotationText);
+    } else if (!existingTitle.toLowerCase().includes(annotationText.toLowerCase())) {
+      span.setAttribute('title', `${annotationText}\n${existingTitle}`);
     }
   }
 }
@@ -477,19 +543,14 @@ function ensureCreatorContextMenuElements() {
   menu.setAttribute('role', 'menu');
   menu.hidden = true;
 
-  const actions = [
-    { action: 'create-note', label: 'Create note' },
-    { action: 'add-to-vocab', label: 'Add to vocab list' },
-    { action: 'flag-difficult', label: 'Flag as difficult' },
-    { action: 'flag-question', label: 'Flag as question' },
-    { action: 'make-sandwich', label: 'Create sandwich' },
-  ];
-
-  actions.forEach(({ action, label }) => {
+  CREATOR_CONTEXT_MENU_ACTIONS.forEach(({ action, label, annotationType }) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.action = action;
     button.textContent = label;
+    if (annotationType) {
+      button.dataset.annotationType = annotationType;
+    }
     button.setAttribute('role', 'menuitem');
     menu.appendChild(button);
   });
@@ -528,24 +589,19 @@ function ensureCreatorContextMenuElements() {
 function updateCreatorContextMenuLabels(selectionData) {
   if (!creatorContextMenuEl || !selectionData) return;
   const { startIndex, endIndex } = selectionData;
-  const diffBtn = creatorContextMenuEl.querySelector('button[data-action="flag-difficult"]');
-  const qBtn = creatorContextMenuEl.querySelector('button[data-action="flag-question"]');
-  const sandwichBtn = creatorContextMenuEl.querySelector('button[data-action="make-sandwich"]');
-  if (diffBtn) {
-    const existing = findCreatorAnnotation(CREATOR_ANNOTATION_TYPES.DIFFICULT, startIndex, endIndex, currentChapter);
-    diffBtn.textContent = existing ? 'Remove difficult flag' : 'Flag as difficult';
-    diffBtn.dataset.active = existing ? 'true' : 'false';
-  }
-  if (qBtn) {
-    const existing = findCreatorAnnotation(CREATOR_ANNOTATION_TYPES.QUESTION, startIndex, endIndex, currentChapter);
-    qBtn.textContent = existing ? 'Remove question flag' : 'Flag as question';
-    qBtn.dataset.active = existing ? 'true' : 'false';
-  }
-  if (sandwichBtn) {
-    const existing = findCreatorAnnotation(CREATOR_ANNOTATION_TYPES.SANDWICH, startIndex, endIndex, currentChapter);
-    sandwichBtn.textContent = existing ? 'Remove sandwich' : 'Create sandwich';
-    sandwichBtn.dataset.active = existing ? 'true' : 'false';
-  }
+  CREATOR_CONTEXT_MENU_ACTIONS.forEach(({ action, annotationType, label, activeLabel }) => {
+    if (!annotationType) return;
+    const button = creatorContextMenuEl.querySelector(`button[data-action="${action}"]`);
+    if (!button) return;
+    const existing = findCreatorAnnotation(annotationType, startIndex, endIndex, currentChapter);
+    if (existing) {
+      button.textContent = activeLabel || label;
+      button.dataset.active = 'true';
+    } else {
+      button.textContent = label;
+      button.dataset.active = 'false';
+    }
+  });
 }
 
 function showCreatorContextMenu(pageX, pageY, selectionData) {
@@ -601,26 +657,23 @@ function handleCreatorContextMenuAction(action) {
   if (!creatorModeEnabled) return;
   if (!state || !state.selection) return;
   const selectionData = state.selection;
-  switch (action) {
-    case 'create-note':
-      if (selectionData.phrase) {
-        openCreatorNoteComposer(selectionData.phrase);
-      }
-      break;
-    case 'add-to-vocab':
-      handleAddSelectionToVocab(selectionData);
-      break;
-    case 'flag-difficult':
-      toggleCreatorAnnotation(CREATOR_ANNOTATION_TYPES.DIFFICULT, selectionData.startIndex, selectionData.endIndex);
-      break;
-    case 'flag-question':
-      toggleCreatorAnnotation(CREATOR_ANNOTATION_TYPES.QUESTION, selectionData.startIndex, selectionData.endIndex);
-      break;
-    case 'make-sandwich':
-      toggleCreatorAnnotation(CREATOR_ANNOTATION_TYPES.SANDWICH, selectionData.startIndex, selectionData.endIndex);
-      break;
-    default:
-      break;
+  const meta = CREATOR_CONTEXT_MENU_ACTION_LOOKUP[action];
+  if (!meta) return;
+  if (meta.annotationType) {
+    toggleCreatorAnnotation(meta.annotationType, selectionData.startIndex, selectionData.endIndex);
+  } else {
+    switch (action) {
+      case 'create-note':
+        if (selectionData.phrase) {
+          openCreatorNoteComposer(selectionData.phrase);
+        }
+        break;
+      case 'add-to-vocab':
+        handleAddSelectionToVocab(selectionData);
+        break;
+      default:
+        break;
+    }
   }
   clearCreatorSelection();
 }
@@ -2272,6 +2325,9 @@ function renderLatinText(text) {
             if (e.shiftKey) {
               e.preventDefault();
               e.stopPropagation();
+              if (creatorModeEnabled) {
+                setActiveCreatorPane('book-notes-pane', 'notes');
+              }
               const notesPane = document.getElementById('notes-content');
               const target = notesPane.querySelector(`.note-entry[data-note-id="${match.note.id}"]`);
               if (target) {
@@ -2565,6 +2621,9 @@ function attachDelegatedLatinClick() {
     if (e.shiftKey) return; // keep shift for notes
     const span = e.target.closest && e.target.closest('.word');
     if (!span || !latin.contains(span)) return;
+    if (creatorModeEnabled) {
+      setActiveCreatorPane('whitaker-pane', 'vocab');
+    }
     const rawCandidates = [];
     if (span.dataset.raw) rawCandidates.push(span.dataset.raw);
     if (span.dataset.raws) {
@@ -2583,6 +2642,9 @@ function attachDelegatedLatinClick() {
 
 /* ---------- note display ---------- */
 function showNoteInPane(noteObj) {
+  if (creatorModeEnabled) {
+    setActiveCreatorPane('book-notes-pane', 'notes');
+  }
   const notesPane = document.getElementById('notes-content');
   const existing = notesPane.querySelector(`.note-entry[data-note-id="${noteObj.id}"]`);
   if (existing) {

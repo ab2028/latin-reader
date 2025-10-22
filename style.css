@@ -1167,6 +1167,28 @@ body.creator-mode .creator-sandwich-marker-start {
   margin-right: 0.04rem;
 }
 
+body.creator-mode .creator-annotation-grammar {
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.14em;
+  text-decoration-skip-ink: auto;
+  text-underline-offset: 0.22em;
+}
+
+body.creator-mode .creator-annotation-grammar-subject {
+  text-decoration-style: solid;
+  text-decoration-color: #2d6cdf;
+}
+
+body.creator-mode .creator-annotation-grammar-direct-object {
+  text-decoration-style: wavy;
+  text-decoration-color: #c05621;
+}
+
+body.creator-mode .creator-annotation-grammar-verb {
+  text-decoration-style: double;
+  text-decoration-color: #0f9d58;
+}
+
 body.high-contrast.creator-mode .creator-annotation-flag {
   background: rgba(255, 110, 110, 0.32);
   box-shadow: inset 0 0 0 1px rgba(255, 110, 110, 0.4);
@@ -1178,6 +1200,18 @@ body.high-contrast.creator-mode .creator-annotation-flag.creator-annotation-flag
 
 body.high-contrast.creator-mode .creator-annotation-flag-start::after {
   background: rgba(255, 90, 90, 0.95);
+}
+
+body.high-contrast.creator-mode .creator-annotation-grammar-subject {
+  text-decoration-color: #1d4ed8;
+}
+
+body.high-contrast.creator-mode .creator-annotation-grammar-direct-object {
+  text-decoration-color: #b45309;
+}
+
+body.high-contrast.creator-mode .creator-annotation-grammar-verb {
+  text-decoration-color: #047857;
 }
 
 body.high-contrast.creator-mode .creator-annotation-flag-start.creator-annotation-flag-question::after {
