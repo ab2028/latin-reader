@@ -94,6 +94,7 @@ let creatorContextMenuEl = null;
 let creatorContextMenuState = null;
 let creatorContextMenuInitialized = false;
 let _creatorContextMenuAttached = false;
+let pendingCreatorNoteAnchor = null;
 
 function scheduleCreatorHighlight(type, id) {
   if (!type || !id) return;
@@ -218,7 +219,18 @@ function normalizeCreatorNotesEntries(rawEntries) {
     const rawChapter = item && (item.chapter ?? item.chapterId ?? item.chapter_id);
     const numericChapter = Number(rawChapter);
     const chapter = Number.isFinite(numericChapter) && numericChapter > 0 ? numericChapter : currentChapter;
-    entries.push({ id, phrase, note, tokens, chapter });
+    const rawStart = item && (item.startIndex ?? item.start ?? item.wordIndex ?? item.position ?? item.begin ?? item.from);
+    const numericStart = Number(rawStart);
+    const startIndex = Number.isFinite(numericStart) && numericStart >= 0 ? Math.floor(numericStart) : null;
+    const rawEnd = item && (item.endIndex ?? item.end ?? item.stop ?? item.to);
+    const numericEnd = Number(rawEnd);
+    const endIndex = Number.isFinite(numericEnd) ? Math.floor(numericEnd) : null;
+    const entry = { id, phrase, note, tokens, chapter };
+    if (startIndex !== null) entry.startIndex = startIndex;
+    if (startIndex !== null && endIndex !== null && endIndex >= startIndex) {
+      entry.endIndex = endIndex;
+    }
+    entries.push(entry);
   }
   return entries;
 }
@@ -519,12 +531,33 @@ function collectCreatorSelectionData() {
   };
 }
 
-function openCreatorNoteComposer(phrase) {
+function openCreatorNoteComposer(phrase, options = {}) {
   const form = document.getElementById('your-notes-form');
   const addBtn = document.getElementById('your-notes-add');
   const phraseInput = document.getElementById('your-notes-word');
   const noteInput = document.getElementById('your-notes-text');
   if (!form || !phraseInput || !noteInput) return;
+  const anchor = options && options.anchor;
+  if (anchor) {
+    const startValue = Number(anchor.startIndex);
+    const normalizedStart = Number.isFinite(startValue) && startValue >= 0 ? Math.floor(startValue) : null;
+    const endValue = Number(anchor.endIndex);
+    const normalizedEnd = Number.isFinite(endValue) ? Math.floor(endValue) : null;
+    const normalizedTokens = Array.isArray(anchor.tokens)
+      ? anchor.tokens.map(normalize).filter(Boolean)
+      : null;
+    if (normalizedStart !== null) {
+      pendingCreatorNoteAnchor = {
+        startIndex: normalizedStart,
+        endIndex: normalizedEnd !== null && normalizedEnd >= normalizedStart ? normalizedEnd : null,
+        tokens: normalizedTokens,
+      };
+    } else {
+      pendingCreatorNoteAnchor = null;
+    }
+  } else {
+    pendingCreatorNoteAnchor = null;
+  }
   setActiveCreatorPane('your-notes-pane', 'notes');
   form.removeAttribute('hidden');
   if (addBtn) addBtn.setAttribute('aria-expanded', 'true');
@@ -665,7 +698,13 @@ function handleCreatorContextMenuAction(action) {
     switch (action) {
       case 'create-note':
         if (selectionData.phrase) {
-          openCreatorNoteComposer(selectionData.phrase);
+          openCreatorNoteComposer(selectionData.phrase, {
+            anchor: {
+              startIndex: selectionData.startIndex,
+              endIndex: selectionData.endIndex,
+              tokens: selectionData.tokens,
+            },
+          });
         }
         break;
       case 'add-to-vocab':
@@ -1404,7 +1443,7 @@ function deleteUserVocabEntry(id) {
   rerenderLatinTextPreservingScroll();
 }
 
-function addUserNoteEntry(phrase, note) {
+function addUserNoteEntry(phrase, note, anchor = null) {
   if (!creatorModeEnabled) {
     return { success: false, message: 'Creator Mode is disabled.' };
   }
@@ -1421,23 +1460,52 @@ function addUserNoteEntry(phrase, note) {
     return { success: false, message: 'Unable to recognize words in that phrase.' };
   }
 
+  const anchorTokens = Array.isArray(anchor?.tokens) ? anchor.tokens.map(normalize).filter(Boolean) : null;
+  const anchorStartRaw = typeof anchor?.startIndex !== 'undefined' ? Number(anchor.startIndex) : null;
+  const anchorStartIndex = Number.isFinite(anchorStartRaw) && anchorStartRaw >= 0 ? Math.floor(anchorStartRaw) : null;
+  const anchorMatches = anchorStartIndex !== null
+    && Array.isArray(anchorTokens)
+    && anchorTokens.length === tokens.length
+    && anchorTokens.every((token, idx) => token === tokens[idx]);
+  const startIndexToUse = anchorMatches ? anchorStartIndex : null;
+  const endIndexToUse = startIndexToUse !== null ? startIndexToUse + tokens.length - 1 : null;
+
   const existing = userNotesEntries.find((entry) => {
     if (!entry || !entry.tokens) return false;
     if (Number(entry.chapter) !== currentChapter) return false;
-    return entry.tokens.length === tokens.length && entry.tokens.every((t, idx) => t === tokens[idx]);
+    if (entry.tokens.length !== tokens.length) return false;
+    if (!entry.tokens.every((t, idx) => t === tokens[idx])) return false;
+    const entryStartRaw = typeof entry.startIndex !== 'undefined' ? Number(entry.startIndex) : null;
+    const entryStartIndex = Number.isFinite(entryStartRaw) && entryStartRaw >= 0 ? Math.floor(entryStartRaw) : null;
+    if (startIndexToUse !== null) {
+      return entryStartIndex === startIndexToUse;
+    }
+    return entryStartIndex === null;
   });
   if (existing) {
     existing.phrase = trimmedPhrase;
     existing.note = trimmedNote;
     existing.tokens = tokens;
+    if (startIndexToUse !== null) {
+      existing.startIndex = startIndexToUse;
+      existing.endIndex = endIndexToUse;
+    } else {
+      delete existing.startIndex;
+      delete existing.endIndex;
+    }
   } else {
-    userNotesEntries.push({
+    const newEntry = {
       id: `n-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       phrase: trimmedPhrase,
       note: trimmedNote,
       tokens,
       chapter: currentChapter,
-    });
+    };
+    if (startIndexToUse !== null) {
+      newEntry.startIndex = startIndexToUse;
+      newEntry.endIndex = endIndexToUse;
+    }
+    userNotesEntries.push(newEntry);
   }
 
   persistUserNotes();
@@ -1470,11 +1538,16 @@ function updateUserNoteEntry(id, phrase, note) {
   if (!trimmedNote) {
     return { success: false, message: 'Note cannot be empty.' };
   }
+  const entryStartRaw = typeof entry.startIndex !== 'undefined' ? Number(entry.startIndex) : null;
+  const entryStartIndex = Number.isFinite(entryStartRaw) && entryStartRaw >= 0 ? Math.floor(entryStartRaw) : null;
   const duplicate = userNotesEntries.find((item) => {
     if (!item || item.id === id) return false;
     if (Number(item.chapter) !== currentChapter) return false;
     if (!Array.isArray(item.tokens) || item.tokens.length !== tokens.length) return false;
-    return item.tokens.every((token, idx) => token === tokens[idx]);
+    if (!item.tokens.every((token, idx) => token === tokens[idx])) return false;
+    const itemStartRaw = typeof item.startIndex !== 'undefined' ? Number(item.startIndex) : null;
+    const itemStartIndex = Number.isFinite(itemStartRaw) && itemStartRaw >= 0 ? Math.floor(itemStartRaw) : null;
+    return itemStartIndex === entryStartIndex;
   });
   if (duplicate) {
     return { success: false, message: 'You already have a note saved for that phrase in this chapter.' };
@@ -1482,6 +1555,11 @@ function updateUserNoteEntry(id, phrase, note) {
   entry.phrase = trimmedPhrase;
   entry.note = trimmedNote;
   entry.tokens = tokens;
+  if (entryStartIndex !== null) {
+    entry.endIndex = entryStartIndex + tokens.length - 1;
+  } else {
+    delete entry.endIndex;
+  }
   persistUserNotes();
   rebuildCreatorCaches();
   renderYourNotesList();
@@ -1519,6 +1597,32 @@ function focusCustomNoteInPanel(noteId) {
   setTimeout(() => target.classList.remove('highlight'), 1200);
 }
 
+function focusCreatorVocabEntry(normalizedWord, preferredWord) {
+  if (!creatorModeEnabled) return false;
+  const normalized = normalize(normalizedWord || '');
+  if (!normalized) return false;
+  const entries = getCurrentChapterVocabEntries(normalized);
+  if (!entries.length) return false;
+  const preferredLower = (preferredWord || '').trim().toLowerCase();
+  let targetEntry = entries.find((entry) => (entry.word || '').toLowerCase() === preferredLower);
+  if (!targetEntry) {
+    targetEntry = entries[0];
+  }
+  setActiveCreatorPane('your-vocab-pane', 'vocab');
+  const container = document.getElementById('your-vocab-list');
+  if (!container) return true;
+  let card = container.querySelector(`.creator-entry[data-vocab-id="${targetEntry.id}"]`);
+  if (!card) {
+    renderYourVocabList();
+    card = container.querySelector(`.creator-entry[data-vocab-id="${targetEntry.id}"]`);
+  }
+  if (!card) return true;
+  card.classList.add('highlight');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => card.classList.remove('highlight'), 1200);
+  return true;
+}
+
 function initializeCreatorNotesForm() {
   const addBtn = document.getElementById('your-notes-add');
   const form = document.getElementById('your-notes-form');
@@ -1530,6 +1634,7 @@ function initializeCreatorNotesForm() {
 
   addBtn.addEventListener('click', () => {
     if (!creatorModeEnabled) return;
+    pendingCreatorNoteAnchor = null;
     form.removeAttribute('hidden');
     addBtn.setAttribute('aria-expanded', 'true');
     phraseInput.value = '';
@@ -1542,13 +1647,14 @@ function initializeCreatorNotesForm() {
       form.setAttribute('hidden', '');
       addBtn.setAttribute('aria-expanded', 'false');
       form.reset();
+      pendingCreatorNoteAnchor = null;
     });
   }
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     if (!creatorModeEnabled) return;
-    const result = addUserNoteEntry(phraseInput.value, noteInput.value);
+    const result = addUserNoteEntry(phraseInput.value, noteInput.value, pendingCreatorNoteAnchor);
     if (!result.success) {
       if (result.message) alert(result.message);
       return;
@@ -1557,6 +1663,7 @@ function initializeCreatorNotesForm() {
     form.setAttribute('hidden', '');
     addBtn.setAttribute('aria-expanded', 'false');
     setActiveCreatorPane('your-notes-pane', 'notes');
+    pendingCreatorNoteAnchor = null;
   });
 }
 
@@ -2563,6 +2670,23 @@ function findUserNoteMatches(wordEntries) {
     if (!entry || !entry.tokens || !entry.tokens.length) continue;
     const entryChapter = Number(entry.chapter);
     if (entryChapter !== currentChapter) continue;
+    const entryStartRaw = typeof entry.startIndex !== 'undefined' ? Number(entry.startIndex) : null;
+    const entryStartIndex = Number.isFinite(entryStartRaw) && entryStartRaw >= 0 ? Math.floor(entryStartRaw) : null;
+    if (entryStartIndex !== null) {
+      if (entryStartIndex > wordEntries.length - entry.tokens.length) continue;
+      let ok = true;
+      for (let j = 0; j < entry.tokens.length; j++) {
+        const word = wordEntries[entryStartIndex + j];
+        if (!word || word.clean !== entry.tokens[j]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        matches.push({ start: entryStartIndex, length: entry.tokens.length, note: entry });
+      }
+      continue;
+    }
     for (let i = 0; i <= wordEntries.length - entry.tokens.length; i++) {
       let ok = true;
       for (let j = 0; j < entry.tokens.length; j++) {
@@ -2621,9 +2745,6 @@ function attachDelegatedLatinClick() {
     if (e.shiftKey) return; // keep shift for notes
     const span = e.target.closest && e.target.closest('.word');
     if (!span || !latin.contains(span)) return;
-    if (creatorModeEnabled) {
-      setActiveCreatorPane('whitaker-pane', 'vocab');
-    }
     const rawCandidates = [];
     if (span.dataset.raw) rawCandidates.push(span.dataset.raw);
     if (span.dataset.raws) {
@@ -2634,6 +2755,19 @@ function attachDelegatedLatinClick() {
     if (!rawCandidates.length && span.textContent) {
       const firstToken = (span.textContent || '').split(/\s+/)[0];
       if (firstToken) rawCandidates.push(firstToken);
+    }
+    if (creatorModeEnabled) {
+      const preferredWord = rawCandidates.find((word) => word && word.trim());
+      const lookupCandidates = collectLookupCandidates(rawCandidates);
+      let handledByCreatorVocab = false;
+      for (const candidate of lookupCandidates) {
+        if (focusCreatorVocabEntry(candidate, preferredWord)) {
+          handledByCreatorVocab = true;
+          break;
+        }
+      }
+      if (handledByCreatorVocab) return;
+      setActiveCreatorPane('whitaker-pane', 'vocab');
     }
     lookupWhitakersWords(rawCandidates);
   });
