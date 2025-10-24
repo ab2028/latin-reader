@@ -221,12 +221,47 @@ function normalizeCreatorNotesEntries(rawEntries) {
     const chapter = Number.isFinite(numericChapter) && numericChapter > 0 ? numericChapter : currentChapter;
     const rawStart = item && (item.startIndex ?? item.start ?? item.wordIndex ?? item.position ?? item.begin ?? item.from);
     const numericStart = Number(rawStart);
-    const startIndex = Number.isFinite(numericStart) && numericStart >= 0 ? Math.floor(numericStart) : null;
+    let startIndex = Number.isFinite(numericStart) && numericStart >= 0 ? Math.floor(numericStart) : null;
     const rawEnd = item && (item.endIndex ?? item.end ?? item.stop ?? item.to);
     const numericEnd = Number(rawEnd);
-    const endIndex = Number.isFinite(numericEnd) ? Math.floor(numericEnd) : null;
+    let endIndex = Number.isFinite(numericEnd) ? Math.floor(numericEnd) : null;
     const entry = { id, phrase, note, tokens, chapter };
-    if (startIndex !== null) entry.startIndex = startIndex;
+    const rawWordIndices = item && (item.wordIndices ?? item.word_indexes ?? item.word_indices ?? null);
+    const normalizedIndicesRaw = Array.isArray(rawWordIndices)
+      ? rawWordIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isFinite(idx) && idx >= 0)
+        .map((idx) => Math.floor(idx))
+      : null;
+    const normalizedIndices = normalizedIndicesRaw && normalizedIndicesRaw.length
+      ? Array.from(new Set(normalizedIndicesRaw)).sort((a, b) => a - b)
+      : null;
+    if (normalizedIndices && normalizedIndices.length) {
+      let sequential = true;
+      const baseIndex = normalizedIndices[0];
+      for (let j = 1; j < normalizedIndices.length; j++) {
+        if (normalizedIndices[j] !== baseIndex + j) {
+          sequential = false;
+          break;
+        }
+      }
+      if (sequential) {
+        entry.wordIndices = normalizedIndices;
+        if (startIndex === null) {
+          startIndex = baseIndex;
+        }
+        const impliedEnd = baseIndex + tokens.length - 1;
+        if (endIndex === null || endIndex < normalizedIndices[0]) {
+          endIndex = impliedEnd;
+        }
+      }
+    }
+    if (startIndex !== null) {
+      entry.startIndex = startIndex;
+      if (endIndex === null || endIndex < startIndex) {
+        endIndex = startIndex + tokens.length - 1;
+      }
+    }
     if (startIndex !== null && endIndex !== null && endIndex >= startIndex) {
       entry.endIndex = endIndex;
     }
@@ -520,6 +555,9 @@ function collectCreatorSelectionData() {
 
   const tokens = sorted.map((word) => word.dataset.raw || word.textContent || '').filter(Boolean);
   const phrase = tokens.join(' ').trim();
+  const wordIndices = sorted
+    .map((word) => Number(word.dataset.wordIndex))
+    .filter((idx) => Number.isFinite(idx) && idx >= 0);
 
   return {
     range,
@@ -528,6 +566,7 @@ function collectCreatorSelectionData() {
     endIndex,
     tokens,
     phrase,
+    wordIndices,
   };
 }
 
@@ -546,11 +585,31 @@ function openCreatorNoteComposer(phrase, options = {}) {
     const normalizedTokens = Array.isArray(anchor.tokens)
       ? anchor.tokens.map(normalize).filter(Boolean)
       : null;
+    const normalizedIndicesRaw = Array.isArray(anchor.wordIndices)
+      ? anchor.wordIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isFinite(idx) && idx >= 0)
+        .map((idx) => Math.floor(idx))
+      : null;
+    const normalizedIndices = normalizedIndicesRaw && normalizedIndicesRaw.length
+      ? Array.from(new Set(normalizedIndicesRaw)).sort((a, b) => a - b)
+      : null;
+    let sequentialIndices = normalizedIndices;
+    if (sequentialIndices && sequentialIndices.length) {
+      const baseIndex = sequentialIndices[0];
+      for (let j = 1; j < sequentialIndices.length; j++) {
+        if (sequentialIndices[j] !== baseIndex + j) {
+          sequentialIndices = null;
+          break;
+        }
+      }
+    }
     if (normalizedStart !== null) {
       pendingCreatorNoteAnchor = {
         startIndex: normalizedStart,
         endIndex: normalizedEnd !== null && normalizedEnd >= normalizedStart ? normalizedEnd : null,
         tokens: normalizedTokens,
+        wordIndices: sequentialIndices,
       };
     } else {
       pendingCreatorNoteAnchor = null;
@@ -703,6 +762,7 @@ function handleCreatorContextMenuAction(action) {
               startIndex: selectionData.startIndex,
               endIndex: selectionData.endIndex,
               tokens: selectionData.tokens,
+              wordIndices: selectionData.wordIndices,
             },
           });
         }
@@ -1463,11 +1523,44 @@ function addUserNoteEntry(phrase, note, anchor = null) {
   const anchorTokens = Array.isArray(anchor?.tokens) ? anchor.tokens.map(normalize).filter(Boolean) : null;
   const anchorStartRaw = typeof anchor?.startIndex !== 'undefined' ? Number(anchor.startIndex) : null;
   const anchorStartIndex = Number.isFinite(anchorStartRaw) && anchorStartRaw >= 0 ? Math.floor(anchorStartRaw) : null;
-  const anchorMatches = anchorStartIndex !== null
-    && Array.isArray(anchorTokens)
+  const anchorWordIndicesRaw = Array.isArray(anchor?.wordIndices)
+    ? anchor.wordIndices
+      .map((idx) => Number(idx))
+      .filter((idx) => Number.isFinite(idx) && idx >= 0)
+      .map((idx) => Math.floor(idx))
+    : null;
+  let anchorWordIndices = anchorWordIndicesRaw && anchorWordIndicesRaw.length
+    ? Array.from(new Set(anchorWordIndicesRaw)).sort((a, b) => a - b)
+    : null;
+  if (anchorWordIndices && anchorWordIndices.length) {
+    const base = anchorWordIndices[0];
+    let sequential = true;
+    for (let j = 1; j < anchorWordIndices.length; j++) {
+      if (anchorWordIndices[j] !== base + j) {
+        sequential = false;
+        break;
+      }
+    }
+    if (!sequential) {
+      anchorWordIndices = null;
+    }
+  }
+  const anchorTokensMatch = Array.isArray(anchorTokens)
     && anchorTokens.length === tokens.length
     && anchorTokens.every((token, idx) => token === tokens[idx]);
-  const startIndexToUse = anchorMatches ? anchorStartIndex : null;
+  let startIndexToUse = null;
+  let wordIndicesToUse = null;
+  if (anchorTokensMatch) {
+    if (anchorWordIndices && anchorWordIndices.length === tokens.length) {
+      startIndexToUse = anchorWordIndices[0];
+      wordIndicesToUse = anchorWordIndices;
+    } else if (anchorStartIndex !== null) {
+      startIndexToUse = anchorStartIndex;
+    }
+  }
+  if (startIndexToUse !== null) {
+    startIndexToUse = Math.floor(startIndexToUse);
+  }
   const endIndexToUse = startIndexToUse !== null ? startIndexToUse + tokens.length - 1 : null;
 
   const existing = userNotesEntries.find((entry) => {
@@ -1477,10 +1570,30 @@ function addUserNoteEntry(phrase, note, anchor = null) {
     if (!entry.tokens.every((t, idx) => t === tokens[idx])) return false;
     const entryStartRaw = typeof entry.startIndex !== 'undefined' ? Number(entry.startIndex) : null;
     const entryStartIndex = Number.isFinite(entryStartRaw) && entryStartRaw >= 0 ? Math.floor(entryStartRaw) : null;
+    const entryIndicesRaw = Array.isArray(entry.wordIndices)
+      ? entry.wordIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isFinite(idx) && idx >= 0)
+        .map((idx) => Math.floor(idx))
+      : null;
+    const entryIndices = entryIndicesRaw && entryIndicesRaw.length === tokens.length
+      ? Array.from(new Set(entryIndicesRaw)).sort((a, b) => a - b)
+      : null;
     if (startIndexToUse !== null) {
+      if (wordIndicesToUse && entryIndices) {
+        if (wordIndicesToUse.length !== entryIndices.length) return false;
+        for (let idx = 0; idx < wordIndicesToUse.length; idx++) {
+          if (wordIndicesToUse[idx] !== entryIndices[idx]) {
+            return false;
+          }
+        }
+        return true;
+      }
       return entryStartIndex === startIndexToUse;
     }
-    return entryStartIndex === null;
+    if (entryStartIndex !== null) return false;
+    if (entryIndices && entryIndices.length) return false;
+    return true;
   });
   if (existing) {
     existing.phrase = trimmedPhrase;
@@ -1489,9 +1602,15 @@ function addUserNoteEntry(phrase, note, anchor = null) {
     if (startIndexToUse !== null) {
       existing.startIndex = startIndexToUse;
       existing.endIndex = endIndexToUse;
+      if (wordIndicesToUse && wordIndicesToUse.length === tokens.length) {
+        existing.wordIndices = wordIndicesToUse;
+      } else {
+        delete existing.wordIndices;
+      }
     } else {
       delete existing.startIndex;
       delete existing.endIndex;
+      delete existing.wordIndices;
     }
   } else {
     const newEntry = {
@@ -1504,6 +1623,9 @@ function addUserNoteEntry(phrase, note, anchor = null) {
     if (startIndexToUse !== null) {
       newEntry.startIndex = startIndexToUse;
       newEntry.endIndex = endIndexToUse;
+      if (wordIndicesToUse && wordIndicesToUse.length === tokens.length) {
+        newEntry.wordIndices = wordIndicesToUse;
+      }
     }
     userNotesEntries.push(newEntry);
   }
@@ -1557,8 +1679,20 @@ function updateUserNoteEntry(id, phrase, note) {
   entry.tokens = tokens;
   if (entryStartIndex !== null) {
     entry.endIndex = entryStartIndex + tokens.length - 1;
+    const existingIndicesRaw = Array.isArray(entry.wordIndices)
+      ? entry.wordIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isFinite(idx) && idx >= 0)
+        .map((idx) => Math.floor(idx))
+      : null;
+    if (existingIndicesRaw && existingIndicesRaw.length === tokens.length) {
+      entry.wordIndices = Array.from(new Set(existingIndicesRaw)).sort((a, b) => a - b);
+    } else {
+      entry.wordIndices = Array.from({ length: tokens.length }, (_, idx) => entryStartIndex + idx);
+    }
   } else {
     delete entry.endIndex;
+    delete entry.wordIndices;
   }
   persistUserNotes();
   rebuildCreatorCaches();
@@ -2670,6 +2804,40 @@ function findUserNoteMatches(wordEntries) {
     if (!entry || !entry.tokens || !entry.tokens.length) continue;
     const entryChapter = Number(entry.chapter);
     if (entryChapter !== currentChapter) continue;
+    const entryIndicesRaw = Array.isArray(entry.wordIndices)
+      ? entry.wordIndices
+        .map((idx) => Number(idx))
+        .filter((idx) => Number.isFinite(idx) && idx >= 0)
+        .map((idx) => Math.floor(idx))
+      : null;
+    const entryIndices = entryIndicesRaw && entryIndicesRaw.length === entry.tokens.length
+      ? Array.from(new Set(entryIndicesRaw)).sort((a, b) => a - b)
+      : null;
+    if (entryIndices && entryIndices.length) {
+      const base = entryIndices[0];
+      let sequential = true;
+      for (let j = 1; j < entryIndices.length; j++) {
+        if (entryIndices[j] !== base + j) {
+          sequential = false;
+          break;
+        }
+      }
+      if (sequential) {
+        let ok = true;
+        for (let j = 0; j < entryIndices.length; j++) {
+          const idx = entryIndices[j];
+          const word = wordEntries[idx];
+          if (!word || word.clean !== entry.tokens[j]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          matches.push({ start: base, length: entry.tokens.length, note: entry });
+          continue;
+        }
+      }
+    }
     const entryStartRaw = typeof entry.startIndex !== 'undefined' ? Number(entry.startIndex) : null;
     const entryStartIndex = Number.isFinite(entryStartRaw) && entryStartRaw >= 0 ? Math.floor(entryStartRaw) : null;
     if (entryStartIndex !== null) {
